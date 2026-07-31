@@ -62,6 +62,14 @@ export function QuoteModal({ open, onClose, onSave, quote }: QuoteModalProps) {
     };
   });
 
+  // `formData.clientId` is only set once, at mount, when this modal is
+  // opened fresh — but this modal's own `useClients()` instance hasn't
+  // necessarily loaded yet at that exact first render, so it can start at 0.
+  // Deriving the effective id (rather than trusting the stored one) means
+  // the form is always valid as soon as clients actually exist, with no
+  // extra effect needed to "catch up" once the async load finishes.
+  const effectiveClientId = formData.clientId || selectableClients[0]?.id || 0;
+
   function handleClientChange(clientId: number) {
     const client = selectableClients.find((item) => item.id === clientId);
     setFormData({
@@ -73,12 +81,18 @@ export function QuoteModal({ open, onClose, onSave, quote }: QuoteModalProps) {
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!formData.clientId) return;
+    if (!effectiveClientId) return;
+
+    const effectiveClient = selectableClients.find((item) => item.id === effectiveClientId);
 
     onSave({
       id: quote?.id ?? Date.now(),
       createdAt: quote?.createdAt ?? new Date().toISOString(),
       ...formData,
+      clientId: effectiveClientId,
+      clientName: effectiveClient
+        ? `${effectiveClient.firstName} ${effectiveClient.lastName}`
+        : formData.clientName,
     });
 
     onClose();
@@ -119,7 +133,7 @@ export function QuoteModal({ open, onClose, onSave, quote }: QuoteModalProps) {
         <FormField label="Client">
           <select
             required
-            value={formData.clientId}
+            value={effectiveClientId}
             onChange={(event) => handleClientChange(Number(event.target.value))}
             className={FIELD_CLASSES}
           >
@@ -221,9 +235,9 @@ export function QuoteModal({ open, onClose, onSave, quote }: QuoteModalProps) {
 
 function FormField({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div>
-      <label className="mb-2 block font-semibold text-gray-300">{label}</label>
+    <label className="block">
+      <span className="mb-2 block font-semibold text-gray-300">{label}</span>
       {children}
-    </div>
+    </label>
   );
 }

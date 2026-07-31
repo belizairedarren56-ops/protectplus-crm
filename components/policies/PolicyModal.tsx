@@ -68,6 +68,11 @@ export function PolicyModal({ open, onClose, onSave, policy }: PolicyModalProps)
     };
   });
 
+  // See QuoteModal.tsx for why this is derived rather than trusted from
+  // `formData.clientId` directly — this modal's own `useClients()` instance
+  // hasn't necessarily loaded yet at the first render after mount.
+  const effectiveClientId = formData.clientId || selectableClients[0]?.id || 0;
+
   function handleClientChange(clientId: number) {
     const client = selectableClients.find((item) => item.id === clientId);
     setFormData({
@@ -79,11 +84,17 @@ export function PolicyModal({ open, onClose, onSave, policy }: PolicyModalProps)
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!formData.clientId) return;
+    if (!effectiveClientId) return;
+
+    const effectiveClient = selectableClients.find((item) => item.id === effectiveClientId);
 
     onSave({
       id: policy?.id ?? Date.now(),
       ...formData,
+      clientId: effectiveClientId,
+      clientName: effectiveClient
+        ? `${effectiveClient.firstName} ${effectiveClient.lastName}`
+        : formData.clientName,
     });
 
     onClose();
@@ -126,7 +137,7 @@ export function PolicyModal({ open, onClose, onSave, policy }: PolicyModalProps)
           <FormField label="Client">
             <select
               required
-              value={formData.clientId}
+              value={effectiveClientId}
               onChange={(event) => handleClientChange(Number(event.target.value))}
               className={FIELD_CLASSES}
             >
@@ -252,9 +263,9 @@ export function PolicyModal({ open, onClose, onSave, policy }: PolicyModalProps)
 
 function FormField({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div>
-      <label className="mb-2 block font-semibold text-gray-300">{label}</label>
+    <label className="block">
+      <span className="mb-2 block font-semibold text-gray-300">{label}</span>
       {children}
-    </div>
+    </label>
   );
 }
