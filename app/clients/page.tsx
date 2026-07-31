@@ -1,6 +1,7 @@
 "use client";
 
 import { ChangeEvent, useMemo, useRef, useState } from "react";
+import clsx from "clsx";
 import { AddClientModal } from "@/components/clients/AddClientModal";
 import { ClientFilters, ClientSortKey } from "@/components/clients/ClientFilters";
 import { ClientTable } from "@/components/clients/ClientTable";
@@ -18,15 +19,20 @@ export default function ClientsPage() {
   const [status, setStatus] = useState("");
   const [insuranceType, setInsuranceType] = useState("");
   const [sortKey, setSortKey] = useState<ClientSortKey>("newest");
+  const [showArchived, setShowArchived] = useState(false);
   const [page, setPage] = useState(1);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [showAddClient, setShowAddClient] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const archivedCount = useMemo(() => clients.filter((client) => client.archivedAt).length, [clients]);
+
   const filteredClients = useMemo(() => {
     const query = search.trim().toLowerCase();
 
     let result = clients.filter((client) => {
+      const matchesArchived = showArchived ? Boolean(client.archivedAt) : !client.archivedAt;
+
       const matchesQuery =
         query.length === 0 ||
         `${client.firstName} ${client.lastName}`.toLowerCase().includes(query) ||
@@ -42,7 +48,7 @@ export default function ClientsPage() {
         client.policyType === insuranceType ||
         (client.insuranceTypes ?? []).includes(insuranceType as InsuranceType);
 
-      return matchesQuery && matchesStatus && matchesInsuranceType;
+      return matchesArchived && matchesQuery && matchesStatus && matchesInsuranceType;
     });
 
     result = [...result].sort((a, b) => {
@@ -56,7 +62,7 @@ export default function ClientsPage() {
     });
 
     return result;
-  }, [clients, search, status, insuranceType, sortKey]);
+  }, [clients, search, status, insuranceType, sortKey, showArchived]);
 
   const totalPages = Math.max(1, Math.ceil(filteredClients.length / PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
@@ -69,11 +75,15 @@ export default function ClientsPage() {
     setPage(1);
   }
 
-  function deleteClient(id: number) {
-    const confirmed = window.confirm("Are you sure you want to delete this client?");
-    if (!confirmed) return;
-
-    setClients((current) => current.filter((client) => client.id !== id));
+  // Archive only — no permanent-delete path exists in Phase 1. Archiving never
+  // touches a client's policies, quotes, tasks, notes, or documents; it only
+  // hides the client from the default view via `archivedAt`.
+  function archiveClient(id: number) {
+    setClients((current) =>
+      current.map((client) =>
+        client.id === id ? { ...client, archivedAt: new Date().toISOString() } : client
+      )
+    );
     setSelectedIds((current) => {
       const next = new Set(current);
       next.delete(id);
@@ -81,11 +91,32 @@ export default function ClientsPage() {
     });
   }
 
-  function deleteSelected() {
-    const confirmed = window.confirm(`Delete ${selectedIds.size} selected client(s)?`);
-    if (!confirmed) return;
+  function restoreClient(id: number) {
+    setClients((current) =>
+      current.map((client) => (client.id === id ? { ...client, archivedAt: undefined } : client))
+    );
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      next.delete(id);
+      return next;
+    });
+  }
 
-    setClients((current) => current.filter((client) => !selectedIds.has(client.id)));
+  function archiveSelected() {
+    setClients((current) =>
+      current.map((client) =>
+        selectedIds.has(client.id) ? { ...client, archivedAt: new Date().toISOString() } : client
+      )
+    );
+    setSelectedIds(new Set());
+  }
+
+  function restoreSelected() {
+    setClients((current) =>
+      current.map((client) =>
+        selectedIds.has(client.id) ? { ...client, archivedAt: undefined } : client
+      )
+    );
     setSelectedIds(new Set());
   }
 
@@ -192,6 +223,35 @@ export default function ClientsPage() {
         />
       </div>
 
+      <div className="mt-4 flex gap-2 rounded-xl border border-yellow-500/20 bg-black/60 p-1 w-fit">
+        <button
+          onClick={() => {
+            setShowArchived(false);
+            resetToFirstPage();
+            setSelectedIds(new Set());
+          }}
+          className={clsx(
+            "rounded-lg px-4 py-2 text-sm font-bold transition",
+            !showArchived ? "bg-yellow-500/20 text-yellow-300" : "text-gray-400 hover:text-gray-200"
+          )}
+        >
+          Active
+        </button>
+        <button
+          onClick={() => {
+            setShowArchived(true);
+            resetToFirstPage();
+            setSelectedIds(new Set());
+          }}
+          className={clsx(
+            "rounded-lg px-4 py-2 text-sm font-bold transition",
+            showArchived ? "bg-yellow-500/20 text-yellow-300" : "text-gray-400 hover:text-gray-200"
+          )}
+        >
+          Archived ({archivedCount})
+        </button>
+      </div>
+
       {selectedIds.size > 0 && (
         <div className="mt-4 flex items-center justify-between rounded-xl border border-yellow-500/30 bg-yellow-500/5 px-5 py-3">
           <p className="text-sm font-bold text-yellow-300">
@@ -201,9 +261,15 @@ export default function ClientsPage() {
             <Button variant="secondary" size="sm" onClick={() => exportCsv(true)}>
               Export Selected
             </Button>
-            <Button variant="danger" size="sm" onClick={deleteSelected}>
-              Delete Selected
-            </Button>
+            {showArchived ? (
+              <Button variant="secondary" size="sm" onClick={restoreSelected}>
+                Restore Selected
+              </Button>
+            ) : (
+              <Button variant="danger" size="sm" onClick={archiveSelected}>
+                Archive Selected
+              </Button>
+            )}
           </div>
         </div>
       )}
@@ -219,7 +285,8 @@ export default function ClientsPage() {
             selectedIds={selectedIds}
             onToggleSelect={toggleSelect}
             onToggleSelectAll={toggleSelectAllOnPage}
-            onDelete={deleteClient}
+            onArchive={archiveClient}
+            onRestore={restoreClient}
             page={currentPage}
             totalPages={totalPages}
             onPageChange={setPage}

@@ -27,6 +27,13 @@ type AddLeadModalProps = {
 export function AddLeadModal({ open, onClose, onAdd }: AddLeadModalProps) {
   const [formData, setFormData] = useState(emptyForm);
 
+  // Cancel/backdrop/× all funnel through here, not just submit, so a
+  // cancelled draft never survives into the next time this modal is opened.
+  function handleClose() {
+    setFormData(emptyForm);
+    onClose();
+  }
+
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
@@ -49,7 +56,7 @@ export function AddLeadModal({ open, onClose, onAdd }: AddLeadModalProps) {
   return (
     <Modal
       open={open}
-      onClose={onClose}
+      onClose={handleClose}
       title="Add New Lead"
       description="Capture a new prospect into the pipeline."
     >
@@ -127,7 +134,7 @@ export function AddLeadModal({ open, onClose, onAdd }: AddLeadModalProps) {
         </div>
 
         <div className="flex justify-end gap-3 pt-4">
-          <Button type="button" variant="secondary" onClick={onClose}>
+          <Button type="button" variant="secondary" onClick={handleClose}>
             Cancel
           </Button>
           <Button type="submit">Save Lead</Button>

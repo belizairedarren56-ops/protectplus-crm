@@ -1,8 +1,10 @@
 "use client";
 
-import { FormEvent, ReactNode, useState } from "react";
+import { FormEvent, ReactNode, useMemo, useState } from "react";
 import { Button } from "@/components/ui/Button";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { Modal } from "@/components/ui/Modal";
+import { useClients } from "@/hooks/useClients";
 import { CARRIERS, INSURANCE_TYPES, PRODUCERS } from "@/lib/constants";
 import type { InsuranceType, Quote, QuoteStatus } from "@/types";
 
@@ -10,18 +12,6 @@ const FIELD_CLASSES =
   "w-full rounded-xl border border-gray-700 bg-black px-4 py-3 text-white outline-none placeholder:text-gray-600 focus:border-yellow-500";
 
 const QUOTE_STATUSES: QuoteStatus[] = ["Draft", "Sent", "Accepted", "Declined", "Expired"];
-
-function emptyForm(): Omit<Quote, "id" | "createdAt"> {
-  return {
-    clientName: "",
-    carrier: CARRIERS[0],
-    premium: 0,
-    coverage: "",
-    producer: PRODUCERS[0],
-    insuranceType: INSURANCE_TYPES[0],
-    status: "Draft",
-  };
-}
 
 type QuoteModalProps = {
   open: boolean;
@@ -31,22 +21,59 @@ type QuoteModalProps = {
 };
 
 export function QuoteModal({ open, onClose, onSave, quote }: QuoteModalProps) {
-  const [formData, setFormData] = useState(() =>
-    quote
-      ? {
-          clientName: quote.clientName,
-          carrier: quote.carrier,
-          premium: quote.premium,
-          coverage: quote.coverage,
-          producer: quote.producer,
-          insuranceType: quote.insuranceType,
-          status: quote.status,
-        }
-      : emptyForm()
-  );
+  const { clients } = useClients();
+
+  // Archived clients can't be picked for a *new* quote, but an existing quote
+  // tied to a since-archived client still shows correctly when editing.
+  const selectableClients = useMemo(() => {
+    const pool = quote
+      ? clients.filter((client) => !client.archivedAt || client.id === quote.clientId)
+      : clients.filter((client) => !client.archivedAt);
+
+    return [...pool].sort((a, b) =>
+      `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`)
+    );
+  }, [clients, quote]);
+
+  const [formData, setFormData] = useState(() => {
+    if (quote) {
+      return {
+        clientId: quote.clientId,
+        clientName: quote.clientName,
+        carrier: quote.carrier,
+        premium: quote.premium,
+        coverage: quote.coverage,
+        producer: quote.producer,
+        insuranceType: quote.insuranceType,
+        status: quote.status,
+      };
+    }
+
+    const firstClient = selectableClients[0];
+    return {
+      clientId: firstClient?.id ?? 0,
+      clientName: firstClient ? `${firstClient.firstName} ${firstClient.lastName}` : "",
+      carrier: CARRIERS[0],
+      premium: 0,
+      coverage: "",
+      producer: PRODUCERS[0],
+      insuranceType: INSURANCE_TYPES[0],
+      status: "Draft" as QuoteStatus,
+    };
+  });
+
+  function handleClientChange(clientId: number) {
+    const client = selectableClients.find((item) => item.id === clientId);
+    setFormData({
+      ...formData,
+      clientId,
+      clientName: client ? `${client.firstName} ${client.lastName}` : formData.clientName,
+    });
+  }
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!formData.clientId) return;
 
     onSave({
       id: quote?.id ?? Date.now(),
@@ -57,6 +84,30 @@ export function QuoteModal({ open, onClose, onSave, quote }: QuoteModalProps) {
     onClose();
   }
 
+  // No clients to attach a quote to — quotes always require a real client
+  // linkage now, so there's nothing valid to submit until one exists.
+  if (selectableClients.length === 0) {
+    return (
+      <Modal
+        open={open}
+        onClose={onClose}
+        title="Create Quote"
+        description="Track carrier quotes for a client."
+      >
+        <EmptyState
+          icon="👤"
+          title="No clients yet"
+          description="Add a client first — every quote has to be linked to one."
+        />
+        <div className="flex justify-end pt-4">
+          <Button type="button" variant="secondary" onClick={onClose}>
+            Close
+          </Button>
+        </div>
+      </Modal>
+    );
+  }
+
   return (
     <Modal
       open={open}
@@ -65,14 +116,20 @@ export function QuoteModal({ open, onClose, onSave, quote }: QuoteModalProps) {
       description="Track carrier quotes for a client."
     >
       <form onSubmit={handleSubmit} className="space-y-5">
-        <FormField label="Client Name">
-          <input
+        <FormField label="Client">
+          <select
             required
-            value={formData.clientName}
-            onChange={(event) => setFormData({ ...formData, clientName: event.target.value })}
+            value={formData.clientId}
+            onChange={(event) => handleClientChange(Number(event.target.value))}
             className={FIELD_CLASSES}
-            placeholder="Jane Cooper"
-          />
+          >
+            {selectableClients.map((client) => (
+              <option key={client.id} value={client.id}>
+                {client.firstName} {client.lastName}
+                {client.archivedAt ? " (archived)" : ""}
+              </option>
+            ))}
+          </select>
         </FormField>
 
         <div className="grid gap-5 md:grid-cols-2">

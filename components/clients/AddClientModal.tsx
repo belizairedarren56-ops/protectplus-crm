@@ -3,7 +3,7 @@
 import { FormEvent, useState } from "react";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
-import { INSURANCE_TYPES } from "@/lib/constants";
+import { INSURANCE_TYPES, PRODUCERS } from "@/lib/constants";
 import type { Client, InsuranceType } from "@/types";
 
 const emptyForm = {
@@ -12,6 +12,7 @@ const emptyForm = {
   phone: "",
   email: "",
   policyType: "Auto",
+  producer: PRODUCERS[0],
 };
 
 type AddClientModalProps = {
@@ -22,6 +23,13 @@ type AddClientModalProps = {
 
 export function AddClientModal({ open, onClose, onAdd }: AddClientModalProps) {
   const [formData, setFormData] = useState(emptyForm);
+
+  // Cancel/backdrop/× all funnel through here, not just submit, so a
+  // cancelled draft never survives into the next time this modal is opened.
+  function handleClose() {
+    setFormData(emptyForm);
+    onClose();
+  }
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -35,6 +43,7 @@ export function AddClientModal({ open, onClose, onAdd }: AddClientModalProps) {
       policyType: formData.policyType,
       status: "New Lead",
       insuranceTypes: [formData.policyType as InsuranceType],
+      producer: formData.producer,
       createdAt: new Date().toISOString(),
     });
 
@@ -45,7 +54,7 @@ export function AddClientModal({ open, onClose, onAdd }: AddClientModalProps) {
   return (
     <Modal
       open={open}
-      onClose={onClose}
+      onClose={handleClose}
       title="Add New Client"
       description="Enter the client's contact and insurance information."
     >
@@ -82,22 +91,38 @@ export function AddClientModal({ open, onClose, onAdd }: AddClientModalProps) {
           onChange={(value) => setFormData({ ...formData, email: value })}
         />
 
-        <div>
-          <label className="mb-2 block font-semibold text-gray-300">Insurance Type</label>
+        <div className="grid gap-5 md:grid-cols-2">
+          <div>
+            <label className="mb-2 block font-semibold text-gray-300">Insurance Type</label>
 
-          <select
-            value={formData.policyType}
-            onChange={(event) => setFormData({ ...formData, policyType: event.target.value })}
-            className="w-full rounded-xl border border-gray-700 bg-black px-4 py-3 text-white outline-none focus:border-yellow-500"
-          >
-            {INSURANCE_TYPES.map((type) => (
-              <option key={type}>{type}</option>
-            ))}
-          </select>
+            <select
+              value={formData.policyType}
+              onChange={(event) => setFormData({ ...formData, policyType: event.target.value })}
+              className="w-full rounded-xl border border-gray-700 bg-black px-4 py-3 text-white outline-none focus:border-yellow-500"
+            >
+              {INSURANCE_TYPES.map((type) => (
+                <option key={type}>{type}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="mb-2 block font-semibold text-gray-300">Producer</label>
+
+            <select
+              value={formData.producer}
+              onChange={(event) => setFormData({ ...formData, producer: event.target.value })}
+              className="w-full rounded-xl border border-gray-700 bg-black px-4 py-3 text-white outline-none focus:border-yellow-500"
+            >
+              {PRODUCERS.map((producer) => (
+                <option key={producer}>{producer}</option>
+              ))}
+            </select>
+          </div>
         </div>
 
         <div className="flex justify-end gap-3 pt-4">
-          <Button type="button" variant="secondary" onClick={onClose}>
+          <Button type="button" variant="secondary" onClick={handleClose}>
             Cancel
           </Button>
           <Button type="submit">Save Client</Button>

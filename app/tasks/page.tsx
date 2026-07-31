@@ -16,8 +16,21 @@ export default function TasksPage() {
   const [view, setView] = useState<ViewMode>("list");
   const [showOpenOnly, setShowOpenOnly] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null | undefined>(undefined);
+  // See app/quotes/page.tsx for why this exists — forces TaskModal to remount
+  // on every open so a cancelled draft never survives to the next one.
+  const [modalSession, setModalSession] = useState(0);
 
   const visibleTasks = showOpenOnly ? tasks.filter((task) => task.status === "Open") : tasks;
+
+  function openNewTask() {
+    setModalSession((session) => session + 1);
+    setEditingTask(null);
+  }
+
+  function openEditTask(task: Task) {
+    setModalSession((session) => session + 1);
+    setEditingTask(task);
+  }
 
   function saveTask(task: Task) {
     setTasks((current) => {
@@ -50,7 +63,7 @@ export default function TasksPage() {
           <p className="mt-2 text-gray-400">Follow-ups, renewals, and to-dos assigned to your team.</p>
         </div>
 
-        <Button onClick={() => setEditingTask(null)}>+ New Task</Button>
+        <Button onClick={openNewTask}>+ New Task</Button>
       </div>
 
       <div className="mt-8 flex flex-wrap items-center justify-between gap-4">
@@ -97,7 +110,7 @@ export default function TasksPage() {
           <TaskList
             tasks={visibleTasks}
             onToggleComplete={toggleComplete}
-            onEdit={setEditingTask}
+            onEdit={openEditTask}
             onDelete={deleteTask}
           />
         ) : (
@@ -106,7 +119,7 @@ export default function TasksPage() {
       </div>
 
       <TaskModal
-        key={editingTask ? editingTask.id : "new"}
+        key={modalSession}
         open={editingTask !== undefined}
         onClose={() => setEditingTask(undefined)}
         onSave={saveTask}

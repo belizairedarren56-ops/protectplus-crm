@@ -13,7 +13,8 @@ type ClientTableProps = {
   selectedIds: Set<number>;
   onToggleSelect: (id: number) => void;
   onToggleSelectAll: () => void;
-  onDelete: (id: number) => void;
+  onArchive: (id: number) => void;
+  onRestore: (id: number) => void;
   page: number;
   totalPages: number;
   onPageChange: (page: number) => void;
@@ -24,7 +25,8 @@ export function ClientTable({
   selectedIds,
   onToggleSelect,
   onToggleSelectAll,
-  onDelete,
+  onArchive,
+  onRestore,
   page,
   totalPages,
   onPageChange,
@@ -71,7 +73,9 @@ export function ClientTable({
             {clients.map((client) => (
               <tr
                 key={client.id}
-                className="border-t border-white/10 transition hover:bg-yellow-500/5"
+                className={`border-t border-white/10 transition hover:bg-yellow-500/5 ${
+                  client.archivedAt ? "opacity-60" : ""
+                }`}
               >
                 <td className="px-6 py-5">
                   <input
@@ -88,6 +92,11 @@ export function ClientTable({
                     <div>
                       <p className="font-bold text-white">
                         {client.firstName} {client.lastName}
+                        {client.archivedAt && (
+                          <span className="ml-2 text-xs font-bold uppercase tracking-wider text-gray-500">
+                            Archived
+                          </span>
+                        )}
                       </p>
                       <p className="text-xs text-gray-500">{client.email}</p>
                     </div>
@@ -122,9 +131,15 @@ export function ClientTable({
                     >
                       View
                     </Link>
-                    <Button variant="danger" size="sm" onClick={() => onDelete(client.id)}>
-                      Delete
-                    </Button>
+                    {client.archivedAt ? (
+                      <Button variant="secondary" size="sm" onClick={() => onRestore(client.id)}>
+                        Restore
+                      </Button>
+                    ) : (
+                      <Button variant="danger" size="sm" onClick={() => onArchive(client.id)}>
+                        Archive
+                      </Button>
+                    )}
                   </div>
                 </td>
               </tr>

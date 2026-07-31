@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { useState } from "react";
 import clsx from "clsx";
 import { Avatar } from "@/components/ui/Avatar";
+import { Button } from "@/components/ui/Button";
 import { ActivityTab } from "@/components/clients/tabs/ActivityTab";
 import { DocumentsTab } from "@/components/clients/tabs/DocumentsTab";
 import { FamilyTab } from "@/components/clients/tabs/FamilyTab";
@@ -37,7 +38,7 @@ export default function ClientProfilePage() {
   const clientId = Number(params.id);
   const [activeTab, setActiveTab] = useState<Tab>("Overview");
 
-  const { clients, clientsLoaded } = useClients();
+  const { clients, setClients, clientsLoaded } = useClients();
   const { policies } = usePolicies();
   const { quotes } = useQuotes();
   const { tasks } = useTasks();
@@ -95,6 +96,27 @@ export default function ClientProfilePage() {
           Back to Clients
         </Link>
       </div>
+
+      {client.archivedAt && (
+        <div className="mt-6 flex items-center justify-between rounded-xl border border-gray-600/40 bg-white/[0.03] px-5 py-3">
+          <p className="text-sm font-bold text-gray-400">
+            This client is archived and hidden from the default Clients list.
+          </p>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() =>
+              setClients((current) =>
+                current.map((item) =>
+                  item.id === client.id ? { ...item, archivedAt: undefined } : item
+                )
+              )
+            }
+          >
+            Restore
+          </Button>
+        </div>
+      )}
 
       <div className="mt-8 flex gap-2 overflow-x-auto border-b border-white/10 pb-1">
         {TABS.map((tab) => (

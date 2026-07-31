@@ -18,6 +18,19 @@ export default function PoliciesPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [editingPolicy, setEditingPolicy] = useState<Policy | null | undefined>(undefined);
+  // See app/quotes/page.tsx for why this exists — forces PolicyModal to
+  // remount on every open so a cancelled draft never survives to the next one.
+  const [modalSession, setModalSession] = useState(0);
+
+  function openNewPolicy() {
+    setModalSession((session) => session + 1);
+    setEditingPolicy(null);
+  }
+
+  function openEditPolicy(policy: Policy) {
+    setModalSession((session) => session + 1);
+    setEditingPolicy(policy);
+  }
 
   const filtered = policies.filter((policy) => {
     const query = search.trim().toLowerCase();
@@ -97,7 +110,7 @@ export default function PoliciesPage() {
       header: "Actions",
       render: (policy) => (
         <div className="flex gap-2">
-          <Button size="sm" variant="secondary" onClick={() => setEditingPolicy(policy)}>
+          <Button size="sm" variant="secondary" onClick={() => openEditPolicy(policy)}>
             Edit
           </Button>
           <Button size="sm" variant="danger" onClick={() => deletePolicy(policy.id)}>
@@ -119,7 +132,7 @@ export default function PoliciesPage() {
           <p className="mt-2 text-gray-400">Every active, renewing, and expired policy on the book.</p>
         </div>
 
-        <Button onClick={() => setEditingPolicy(null)}>+ Add Policy</Button>
+        <Button onClick={openNewPolicy}>+ Add Policy</Button>
       </div>
 
       <div className="mt-8 flex flex-col gap-4 lg:flex-row lg:items-center">
@@ -160,7 +173,7 @@ export default function PoliciesPage() {
       </div>
 
       <PolicyModal
-        key={editingPolicy ? editingPolicy.id : "new"}
+        key={modalSession}
         open={editingPolicy !== undefined}
         onClose={() => setEditingPolicy(undefined)}
         onSave={savePolicy}

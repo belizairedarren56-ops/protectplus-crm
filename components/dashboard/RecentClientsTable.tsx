@@ -9,7 +9,10 @@ import type { Client } from "@/types";
 
 export function RecentClientsTable({ clients }: { clients: Client[] }) {
   const router = useRouter();
-  const recent = [...clients].sort((a, b) => b.id - a.id).slice(0, 6);
+  const recent = clients
+    .filter((client) => !client.archivedAt)
+    .sort((a, b) => b.id - a.id)
+    .slice(0, 6);
 
   const columns: TableColumn<Client>[] = [
     {

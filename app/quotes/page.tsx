@@ -15,6 +15,21 @@ export default function QuotesPage() {
   const { quotes, setQuotes, quotesLoaded } = useQuotes();
   const [search, setSearch] = useState("");
   const [editingQuote, setEditingQuote] = useState<Quote | null | undefined>(undefined);
+  // Bumped every time the modal is opened (new or edit) so QuoteModal always
+  // remounts fresh via its `key` below — otherwise two consecutive "+ New
+  // Quote" clicks (with a cancel in between) reuse the same component
+  // instance and a cancelled draft survives into the next open.
+  const [modalSession, setModalSession] = useState(0);
+
+  function openNewQuote() {
+    setModalSession((session) => session + 1);
+    setEditingQuote(null);
+  }
+
+  function openEditQuote(quote: Quote) {
+    setModalSession((session) => session + 1);
+    setEditingQuote(quote);
+  }
 
   const filtered = quotes.filter((quote) => {
     const query = search.trim().toLowerCase();
@@ -82,7 +97,7 @@ export default function QuotesPage() {
       header: "Actions",
       render: (quote) => (
         <div className="flex gap-2">
-          <Button size="sm" variant="secondary" onClick={() => setEditingQuote(quote)}>
+          <Button size="sm" variant="secondary" onClick={() => openEditQuote(quote)}>
             Edit
           </Button>
           <Button size="sm" variant="danger" onClick={() => deleteQuote(quote.id)}>
@@ -104,7 +119,7 @@ export default function QuotesPage() {
           <p className="mt-2 text-gray-400">Track carrier quotes from draft through acceptance.</p>
         </div>
 
-        <Button onClick={() => setEditingQuote(null)}>+ New Quote</Button>
+        <Button onClick={openNewQuote}>+ New Quote</Button>
       </div>
 
       <div className="mt-8">
@@ -126,7 +141,7 @@ export default function QuotesPage() {
       </div>
 
       <QuoteModal
-        key={editingQuote ? editingQuote.id : "new"}
+        key={modalSession}
         open={editingQuote !== undefined}
         onClose={() => setEditingQuote(undefined)}
         onSave={saveQuote}
