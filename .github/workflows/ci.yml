@@ -19,8 +19,10 @@ jobs:
       - run: npm run typecheck
       - name: Run npm test
         run: |
+          set +e
           npm test > test-output.log 2>&1
           code=$?
+          set -e
           if [ $code -ne 0 ]; then
             msg=$(tail -c 4000 test-output.log | sed ':a;N;$!ba;s/\n/%0A/g' | sed 's/\r//g')
             echo "::error::$msg"
@@ -89,8 +91,10 @@ jobs:
       - run: supabase start
       - name: Run RLS/isolation/constraint tests
         run: |
+          set +e
           npm run test:rls > rls-output.log 2>&1
           code=$?
+          set -e
           if [ $code -ne 0 ]; then
             msg=$(tail -c 4000 rls-output.log | sed ':a;N;$!ba;s/\n/%0A/g' | sed 's/\r//g')
             echo "::error::$msg"
