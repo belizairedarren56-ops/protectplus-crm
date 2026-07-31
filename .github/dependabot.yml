@@ -1,0 +1,19 @@
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    # Advisory tracking/visibility — see the audit findings noted in the
+    # Phase 2 migration plan. Do not blanket-approve major bumps for next/
+    # eslint without checking the changelog; some existing advisories only
+    # resolve via a breaking major that needs a deliberate migration.
+    groups:
+      dev-dependencies:
+        dependency-type: "development"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
