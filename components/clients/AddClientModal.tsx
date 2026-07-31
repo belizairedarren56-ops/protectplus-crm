@@ -92,8 +92,8 @@ export function AddClientModal({ open, onClose, onAdd }: AddClientModalProps) {
         />
 
         <div className="grid gap-5 md:grid-cols-2">
-          <div>
-            <label className="mb-2 block font-semibold text-gray-300">Insurance Type</label>
+          <label className="block">
+            <span className="mb-2 block font-semibold text-gray-300">Insurance Type</span>
 
             <select
               value={formData.policyType}
@@ -104,10 +104,10 @@ export function AddClientModal({ open, onClose, onAdd }: AddClientModalProps) {
                 <option key={type}>{type}</option>
               ))}
             </select>
-          </div>
+          </label>
 
-          <div>
-            <label className="mb-2 block font-semibold text-gray-300">Producer</label>
+          <label className="block">
+            <span className="mb-2 block font-semibold text-gray-300">Producer</span>
 
             <select
               value={formData.producer}
@@ -118,7 +118,7 @@ export function AddClientModal({ open, onClose, onAdd }: AddClientModalProps) {
                 <option key={producer}>{producer}</option>
               ))}
             </select>
-          </div>
+          </label>
         </div>
 
         <div className="flex justify-end gap-3 pt-4">
@@ -142,8 +142,8 @@ type FormInputProps = {
 
 function FormInput({ label, placeholder, value, type = "text", onChange }: FormInputProps) {
   return (
-    <div>
-      <label className="mb-2 block font-semibold text-gray-300">{label}</label>
+    <label className="block">
+      <span className="mb-2 block font-semibold text-gray-300">{label}</span>
 
       <input
         required
@@ -153,6 +153,6 @@ function FormInput({ label, placeholder, value, type = "text", onChange }: FormI
         placeholder={placeholder}
         className="w-full rounded-xl border border-gray-700 bg-black px-4 py-3 text-white placeholder:text-gray-600 outline-none focus:border-yellow-500"
       />
-    </div>
+    </label>
   );
 }

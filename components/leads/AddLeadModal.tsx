@@ -146,9 +146,9 @@ export function AddLeadModal({ open, onClose, onAdd }: AddLeadModalProps) {
 
 function FormField({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div>
-      <label className="mb-2 block font-semibold text-gray-300">{label}</label>
+    <label className="block">
+      <span className="mb-2 block font-semibold text-gray-300">{label}</span>
       {children}
-    </div>
+    </label>
   );
 }

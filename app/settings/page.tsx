@@ -351,10 +351,10 @@ export default function SettingsPage() {
 
 function FormField({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div>
-      <label className="mb-2 block font-semibold text-gray-300">{label}</label>
+    <label className="block">
+      <span className="mb-2 block font-semibold text-gray-300">{label}</span>
       {children}
-    </div>
+    </label>
   );
 }
 
@@ -368,8 +368,8 @@ function ColorField({
   onChange: (value: string) => void;
 }) {
   return (
-    <div>
-      <label className="mb-2 block font-semibold text-gray-300">{label}</label>
+    <label className="block">
+      <span className="mb-2 block font-semibold text-gray-300">{label}</span>
       <div className="flex items-center gap-3">
         <input
           type="color"
@@ -379,7 +379,7 @@ function ColorField({
         />
         <span className="font-mono text-sm text-gray-400">{value}</span>
       </div>
-    </div>
+    </label>
   );
 }
 
