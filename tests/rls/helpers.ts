@@ -31,7 +31,8 @@ export async function createTestAgency(admin: SupabaseClient, name: string): Pro
   return (data as { id: string }).id;
 }
 
-export async function deleteTestAgency(admin: SupabaseClient, agencyId: string): Promise<void> {
+export async function deleteTestAgency(admin: SupabaseClient, agencyId: string | undefined): Promise<void> {
+  if (!agencyId) return;
   await admin.from("agencies").delete().eq("id", agencyId);
 }
 
@@ -71,6 +72,11 @@ export async function createTestUser(
 // Deleting the auth user cascades to its profile row (profiles.id has
 // `on delete cascade` against auth.users). Always delete users before their
 // agency — agencies has no cascade, so a lingering profile would block it.
-export async function deleteTestUser(admin: SupabaseClient, userId: string): Promise<void> {
+//
+// Guards against a missing/undefined id so that if a beforeAll fails
+// part-way through setup, the afterAll cleanup doesn't throw its own
+// confusing secondary error on top of the real one.
+export async function deleteTestUser(admin: SupabaseClient, userId: string | undefined): Promise<void> {
+  if (!userId) return;
   await admin.auth.admin.deleteUser(userId);
 }

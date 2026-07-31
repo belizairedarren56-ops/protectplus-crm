@@ -64,14 +64,19 @@ grant execute on function owns_or_admin(uuid) to authenticated;
 
 -- ── Base table privileges ────────────────────────────────────────────────
 -- GRANT decides whether a role can attempt an operation at all; RLS then
--- filters which rows. This app is internal/authenticated-only — the `anon`
--- role gets nothing on any business table.
+-- filters which rows — and these are independent: BYPASSRLS (which
+-- `service_role` has) only skips the *policy* check, it does not imply the
+-- base table GRANT. Newer Supabase projects default `auto_expose_new_tables`
+-- to false, so nothing is reachable via any Data API role without an
+-- explicit grant here, `service_role` included. This app is
+-- internal/authenticated-only — the `anon` role gets nothing on any
+-- business table.
 
-grant usage on schema public to authenticated;
+grant usage on schema public to authenticated, service_role;
 grant select, insert, update, delete on
   agencies, profiles, clients, family_members, leads, quotes, policies,
   tasks, documents, client_notes, notifications, activity_log
-  to authenticated;
+  to authenticated, service_role;
 
 -- ── Enable RLS everywhere ────────────────────────────────────────────────
 
