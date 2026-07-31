@@ -2,78 +2,66 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import clsx from "clsx";
+import { Avatar } from "@/components/ui/Avatar";
+import { ActivityTab } from "@/components/clients/tabs/ActivityTab";
+import { DocumentsTab } from "@/components/clients/tabs/DocumentsTab";
+import { FamilyTab } from "@/components/clients/tabs/FamilyTab";
+import { NotesTab } from "@/components/clients/tabs/NotesTab";
+import { OverviewTab } from "@/components/clients/tabs/OverviewTab";
+import { PoliciesTab } from "@/components/clients/tabs/PoliciesTab";
+import { QuotesTab } from "@/components/clients/tabs/QuotesTab";
+import { TasksTab } from "@/components/clients/tabs/TasksTab";
+import { useClients } from "@/hooks/useClients";
+import { useDocuments } from "@/hooks/useDocuments";
+import { usePolicies } from "@/hooks/usePolicies";
+import { useQuotes } from "@/hooks/useQuotes";
+import { useTasks } from "@/hooks/useTasks";
 
-type Client = {
-  id: number;
-  firstName: string;
-  lastName: string;
-  phone: string;
-  email: string;
-  policyType: string;
-  status: string;
-};
+const TABS = [
+  "Overview",
+  "Policies",
+  "Quotes",
+  "Tasks",
+  "Notes",
+  "Documents",
+  "Activity Timeline",
+  "Family Members",
+] as const;
+
+type Tab = (typeof TABS)[number];
 
 export default function ClientProfilePage() {
   const params = useParams();
   const clientId = Number(params.id);
+  const [activeTab, setActiveTab] = useState<Tab>("Overview");
 
-  const [client, setClient] = useState<Client | null>(null);
-  const [loaded, setLoaded] = useState(false);
-  const [notes, setNotes] = useState("");
+  const { clients, clientsLoaded } = useClients();
+  const { policies } = usePolicies();
+  const { quotes } = useQuotes();
+  const { tasks } = useTasks();
+  const { documents } = useDocuments();
 
-  useEffect(() => {
-    const savedClients = localStorage.getItem("protectplus-clients");
+  const client = clients.find((item) => item.id === clientId) ?? null;
+  const clientPolicies = policies.filter((policy) => policy.clientId === clientId);
+  const clientQuotes = quotes.filter((quote) => quote.clientId === clientId);
+  const clientTasks = tasks.filter((task) => task.clientId === clientId);
+  const clientDocuments = documents.filter((document) => document.clientId === clientId);
 
-    if (savedClients) {
-      try {
-        const clients = JSON.parse(savedClients) as Client[];
-        const foundClient = clients.find(
-          (item) => item.id === clientId
-        );
-
-        setClient(foundClient ?? null);
-      } catch (error) {
-        console.error("Could not load client:", error);
-      }
-    }
-
-    const savedNotes = localStorage.getItem(
-      `protectplus-client-notes-${clientId}`
-    );
-
-    if (savedNotes) {
-      setNotes(savedNotes);
-    }
-
-    setLoaded(true);
-  }, [clientId]);
-
-  function saveNotes() {
-    localStorage.setItem(
-      `protectplus-client-notes-${clientId}`,
-      notes
-    );
-
-    alert("Notes saved.");
-  }
-
-  if (!loaded) {
+  if (!clientsLoaded) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-[#06080c] text-white">
+      <div className="flex min-h-[60vh] items-center justify-center">
         <p className="text-gray-400">Loading client...</p>
-      </main>
+      </div>
     );
   }
 
   if (!client) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-[#06080c] p-8 text-white">
+      <div className="flex min-h-[60vh] items-center justify-center">
         <div className="text-center">
-          <h1 className="text-4xl font-black text-red-400">
-            Client not found
-          </h1>
-
+          <h1 className="text-4xl font-black text-red-400">Client not found</h1>
           <Link
             href="/clients"
             className="mt-6 inline-block rounded-xl border border-yellow-500/40 px-5 py-3 font-bold text-yellow-400 hover:bg-yellow-500/10"
@@ -81,126 +69,67 @@ export default function ClientProfilePage() {
             Back to Clients
           </Link>
         </div>
-      </main>
+      </div>
     );
   }
 
   return (
-    <main className="relative min-h-screen overflow-hidden bg-[#06080c] p-8 text-white">
-      <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-        <div className="h-[800px] w-[800px] bg-[url('/protectplus-logo.png')] bg-contain bg-center bg-no-repeat opacity-[0.06]" />
-      </div>
-
-      <div className="relative z-10 mx-auto max-w-6xl">
-        <div className="flex items-center justify-between">
+    <div className="mx-auto max-w-6xl">
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div className="flex items-center gap-4">
+          <Avatar firstName={client.firstName} lastName={client.lastName} size="lg" />
           <div>
             <p className="text-sm font-bold uppercase tracking-[0.25em] text-yellow-500">
               ProtectPlus Client Profile
             </p>
-
-            <h1 className="mt-2 text-5xl font-black">
+            <h1 className="mt-1 text-4xl font-black sm:text-5xl">
               {client.firstName} {client.lastName}
             </h1>
-
-            <p className="mt-2 text-gray-400">
-              View contact information, insurance details, and notes.
-            </p>
-          </div>
-
-          <Link
-            href="/clients"
-            className="rounded-xl border border-yellow-500/40 px-5 py-3 font-bold text-yellow-400 hover:bg-yellow-500/10"
-          >
-            Back to Clients
-          </Link>
-        </div>
-
-        <div className="mt-10 grid gap-6 lg:grid-cols-3">
-          <div className="rounded-2xl border border-yellow-500/20 bg-black/75 p-6 backdrop-blur-sm">
-            <p className="text-sm font-bold uppercase tracking-wider text-gray-500">
-              Contact
-            </p>
-
-            <div className="mt-5 space-y-4">
-              <div>
-                <p className="text-sm text-gray-500">Phone</p>
-                <p className="mt-1 font-bold text-white">
-                  {client.phone}
-                </p>
-              </div>
-
-              <div>
-                <p className="text-sm text-gray-500">Email</p>
-                <p className="mt-1 font-bold text-white">
-                  {client.email}
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <div className="rounded-2xl border border-yellow-500/20 bg-black/75 p-6 backdrop-blur-sm">
-            <p className="text-sm font-bold uppercase tracking-wider text-gray-500">
-              Insurance
-            </p>
-
-            <div className="mt-5 space-y-4">
-              <div>
-                <p className="text-sm text-gray-500">
-                  Insurance Type
-                </p>
-
-                <p className="mt-1 font-bold text-white">
-                  {client.policyType}
-                </p>
-              </div>
-
-              <div>
-                <p className="text-sm text-gray-500">Status</p>
-
-                <span className="mt-2 inline-block rounded-full border border-blue-500/40 bg-blue-500/10 px-3 py-1 text-sm font-bold text-blue-400">
-                  {client.status}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          <div className="rounded-2xl border border-yellow-500/20 bg-black/75 p-6 backdrop-blur-sm">
-            <p className="text-sm font-bold uppercase tracking-wider text-gray-500">
-              Client ID
-            </p>
-
-            <p className="mt-5 break-all font-mono text-yellow-400">
-              {client.id}
-            </p>
           </div>
         </div>
 
-        <div className="mt-6 rounded-2xl border border-yellow-500/20 bg-black/75 p-6 backdrop-blur-sm">
-          <div>
-            <h2 className="text-2xl font-black text-yellow-400">
-              Notes
-            </h2>
-
-            <p className="mt-1 text-sm text-gray-500">
-              Save follow-ups, coverage questions, and client details.
-            </p>
-          </div>
-
-          <textarea
-            value={notes}
-            onChange={(event) => setNotes(event.target.value)}
-            placeholder="Example: Call Friday to discuss umbrella coverage..."
-            className="mt-5 min-h-48 w-full rounded-xl border border-gray-700 bg-black px-4 py-4 text-white outline-none placeholder:text-gray-600 focus:border-yellow-500"
-          />
-
-          <button
-            onClick={saveNotes}
-            className="mt-4 rounded-xl border border-yellow-300 bg-gradient-to-r from-yellow-400 to-amber-600 px-6 py-3 font-black text-black hover:brightness-110"
-          >
-            Save Notes
-          </button>
-        </div>
+        <Link
+          href="/clients"
+          className="rounded-xl border border-yellow-500/40 px-5 py-3 font-bold text-yellow-400 hover:bg-yellow-500/10"
+        >
+          Back to Clients
+        </Link>
       </div>
-    </main>
+
+      <div className="mt-8 flex gap-2 overflow-x-auto border-b border-white/10 pb-1">
+        {TABS.map((tab) => (
+          <button
+            key={tab}
+            onClick={() => setActiveTab(tab)}
+            className={clsx(
+              "whitespace-nowrap rounded-t-xl border-b-2 px-4 py-3 text-sm font-bold transition",
+              activeTab === tab
+                ? "border-yellow-400 text-yellow-400"
+                : "border-transparent text-gray-500 hover:text-gray-300"
+            )}
+          >
+            {tab}
+          </button>
+        ))}
+      </div>
+
+      <div className="mt-6">
+        {activeTab === "Overview" && <OverviewTab client={client} />}
+        {activeTab === "Policies" && <PoliciesTab policies={clientPolicies} />}
+        {activeTab === "Quotes" && <QuotesTab quotes={clientQuotes} />}
+        {activeTab === "Tasks" && <TasksTab tasks={clientTasks} />}
+        {activeTab === "Notes" && <NotesTab clientId={client.id} />}
+        {activeTab === "Documents" && <DocumentsTab documents={clientDocuments} />}
+        {activeTab === "Activity Timeline" && (
+          <ActivityTab
+            client={client}
+            policies={clientPolicies}
+            quotes={clientQuotes}
+            tasks={clientTasks}
+          />
+        )}
+        {activeTab === "Family Members" && <FamilyTab client={client} />}
+      </div>
+    </div>
   );
 }
