@@ -56,3 +56,50 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build
+
+  # Phase 2 foundation: spins up a real local Postgres/Auth/PostgREST stack
+  # (Docker is preinstalled on GitHub-hosted runners) and runs the RLS
+  # isolation suites and the auth e2e flow against it for real — this is
+  # exactly the verification that can't happen in a sandbox without Docker.
+  # Entirely separate from the three jobs above, which need no Supabase
+  # configuration at all and keep testing the existing localStorage app.
+  supabase:
+    runs-on: ubuntu-latest
+    env:
+      SUPABASE_URL: http://127.0.0.1:54321
+      NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1:54321
+      # Supabase CLI's well-known local-dev demo keys (see tests/rls/helpers.ts
+      # for why these are safe to have in plain text — they only work
+      # against a local instance, never a hosted project).
+      SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0
+      SUPABASE_SERVICE_ROLE_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU
+      E2E_TEST_USER_EMAIL: e2e-admin@example.test
+      E2E_TEST_USER_PASSWORD: E2E-test-password-please-change-123
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: npm
+      - run: npm ci
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      - run: supabase start
+      - name: Run RLS/isolation/constraint tests
+        run: |
+          npm run test:rls > rls-output.log 2>&1
+          code=$?
+          if [ $code -ne 0 ]; then
+            msg=$(tail -c 4000 rls-output.log | sed ':a;N;$!ba;s/\n/%0A/g' | sed 's/\r//g')
+            echo "::error::$msg"
+          fi
+          cat rls-output.log
+          exit $code
+      - name: Bootstrap the e2e test admin (also exercises scripts/bootstrap-admin.ts for real)
+        run: npm run bootstrap-admin -- --email "$E2E_TEST_USER_EMAIL" --name "E2E Test Admin" --password "$E2E_TEST_USER_PASSWORD"
+      - run: npx playwright install --with-deps chromium
+      - run: npx playwright test e2e/auth.spec.ts
+      - run: supabase stop
+        if: always()
