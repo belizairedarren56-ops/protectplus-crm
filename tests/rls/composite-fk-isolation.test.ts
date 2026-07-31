@@ -45,6 +45,7 @@ describe("composite foreign keys reject cross-agency references (service role, R
       agency_id: agencyB,
       client_id: clientInA, // belongs to Agency A
       producer_id: producerInA,
+      client_name: "Jane Cooper",
       carrier: "State Farm",
       policy_number: "SF-0000001",
       product: "Auto",
@@ -53,7 +54,10 @@ describe("composite foreign keys reject cross-agency references (service role, R
       premium: 1000,
     });
     expect(error).not.toBeNull();
-    expect(error?.message).toMatch(/foreign key|violates/i);
+    // Specifically the FK, not just "some constraint or other" — a loose
+    // match here would let a missing-column bug in the test itself pass
+    // for the wrong reason (as happened with client_name before this fix).
+    expect(error?.message).toMatch(/foreign key/i);
   });
 
   it("rejects a policy claiming Agency B but referencing a producer from Agency A", async () => {
@@ -68,6 +72,7 @@ describe("composite foreign keys reject cross-agency references (service role, R
       agency_id: agencyB,
       client_id: (clientInB as { id: string }).id,
       producer_id: producerInA, // belongs to Agency A
+      client_name: "Someone Else",
       carrier: "State Farm",
       policy_number: "SF-0000002",
       product: "Auto",
@@ -76,7 +81,7 @@ describe("composite foreign keys reject cross-agency references (service role, R
       premium: 1000,
     });
     expect(error).not.toBeNull();
-    expect(error?.message).toMatch(/foreign key|violates/i);
+    expect(error?.message).toMatch(/foreign key/i);
   });
 
   it("rejects a client whose assigned_producer_id belongs to a different agency", async () => {
@@ -87,7 +92,7 @@ describe("composite foreign keys reject cross-agency references (service role, R
       assigned_producer_id: producerInA, // belongs to Agency A
     });
     expect(error).not.toBeNull();
-    expect(error?.message).toMatch(/foreign key|violates/i);
+    expect(error?.message).toMatch(/foreign key/i);
   });
 
   it("rejects a task whose client belongs to a different agency than the task", async () => {
@@ -99,7 +104,7 @@ describe("composite foreign keys reject cross-agency references (service role, R
       due_date: "2026-01-01",
     });
     expect(error).not.toBeNull();
-    expect(error?.message).toMatch(/foreign key|violates/i);
+    expect(error?.message).toMatch(/foreign key/i);
   });
 
   it("accepts a policy where agency_id, client_id, and producer_id all agree", async () => {
@@ -107,6 +112,7 @@ describe("composite foreign keys reject cross-agency references (service role, R
       agency_id: agencyA,
       client_id: clientInA,
       producer_id: producerInA,
+      client_name: "Jane Cooper",
       carrier: "State Farm",
       policy_number: "SF-0000003",
       product: "Auto",

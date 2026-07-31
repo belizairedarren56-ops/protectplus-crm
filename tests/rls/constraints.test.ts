@@ -42,6 +42,7 @@ describe("data-integrity constraints", () => {
     const { error } = await producer.client.from("quotes").insert({
       agency_id: agencyId,
       client_id: clientId,
+      client_name: "Jane Cooper",
       carrier: "State Farm",
       premium: -100,
       insurance_type: "Auto",
@@ -54,6 +55,7 @@ describe("data-integrity constraints", () => {
     const { error } = await producer.client.from("policies").insert({
       agency_id: agencyId,
       client_id: clientId,
+      client_name: "Jane Cooper",
       carrier: "State Farm",
       policy_number: `SF-${Date.now()}`,
       product: "Auto",
@@ -70,6 +72,7 @@ describe("data-integrity constraints", () => {
     const base = {
       agency_id: agencyId,
       client_id: clientId,
+      client_name: "Jane Cooper",
       carrier: "State Farm",
       product: "Auto" as const,
       effective_date: "2026-01-01",
