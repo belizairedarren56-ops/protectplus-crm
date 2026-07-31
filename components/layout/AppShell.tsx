@@ -1,16 +1,15 @@
 "use client";
 
-import { ReactNode, useEffect, useState } from "react";
+import { ReactNode, useState } from "react";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Topbar } from "@/components/layout/Topbar";
-import { ensureSeedData } from "@/lib/seed";
 
+// No automatic demo-data loading here on purpose: every entity hook already
+// initializes safely to `[]` when localStorage is empty, so there is nothing
+// to gate page rendering on. Demo data is an explicit action from
+// Settings > Demo Data (see hooks/useDemoData.ts) — never triggered on mount.
 export function AppShell({ children }: { children: ReactNode }) {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
-
-  useEffect(() => {
-    ensureSeedData();
-  }, []);
 
   return (
     <div className="flex min-h-screen bg-[#06080c] text-white">

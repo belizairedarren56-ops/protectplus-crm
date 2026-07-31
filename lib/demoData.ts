@@ -1,10 +1,4 @@
-import { getItem, setItem, STORAGE_KEYS } from "@/lib/storage";
-import {
-  CARRIERS,
-  CLIENT_STATUSES,
-  INSURANCE_TYPES,
-  PRODUCERS,
-} from "@/lib/constants";
+import { CARRIERS, CLIENT_STATUSES, INSURANCE_TYPES, PRODUCERS } from "@/lib/constants";
 import { LEAD_STAGES, DOCUMENT_FOLDERS } from "@/types";
 import type {
   Client,
@@ -19,6 +13,11 @@ import type {
   QuoteStatus,
   Task,
 } from "@/types";
+
+// Pure generator functions only — nothing in this file touches localStorage or
+// any hook's state. `hooks/useDemoData.ts` is the only thing allowed to call
+// these and feed the results into the real entity hooks, so demo data flows
+// through the exact same React-state path as any other mutation.
 
 function mulberry32(seed: number) {
   let state = seed;
@@ -182,6 +181,7 @@ function generateClient(rng: Rng, id: number): Client {
     policyNumber: randomPolicyNumber(rng, carrier),
     insuranceTypes,
     createdAt: isoDaysFromNow(-randomInt(rng, 5, 700)),
+    producer: pick(rng, PRODUCERS),
     familyMembers:
       rng() > 0.5
         ? pickMany(rng, FIRST_NAMES, randomInt(rng, 1, 2)).map((name, index) => ({
@@ -190,6 +190,7 @@ function generateClient(rng: Rng, id: number): Client {
             relationship: pick(rng, ["Spouse", "Child", "Parent"]),
           }))
         : [],
+    isDemo: true,
   };
 }
 
@@ -204,22 +205,32 @@ function policyStatusFor(rng: Rng, expirationIso: string): PolicyStatus {
   return "Active";
 }
 
-export function ensureSeedData(): void {
-  if (typeof window === "undefined") return;
-  if (getItem<boolean>(STORAGE_KEYS.seeded, false)) return;
+export type DemoDataSet = {
+  clients: Client[];
+  policies: Policy[];
+  leads: Lead[];
+  quotes: Quote[];
+  tasks: Task[];
+  documents: Document[];
+  notifications: Notification[];
+};
 
+/**
+ * Generates a self-contained set of demo records, every one tagged
+ * `isDemo: true`. Pure function — takes a starting numeric id and a seed,
+ * returns data, writes nothing anywhere. Every record's `id` comes from
+ * `startId` upward, so callers can keep ids unique against whatever's already
+ * in each entity list.
+ */
+export function generateDemoData(startId: number): DemoDataSet {
   const rng = mulberry32(20260730);
+  let nextId = startId;
 
-  const existingClients = getItem<Client[]>(STORAGE_KEYS.clients, []);
-  const clients = [...existingClients];
-  let nextId = Date.now();
-
-  while (clients.length < 50) {
+  const clients: Client[] = [];
+  for (let i = 0; i < 50; i++) {
     clients.push(generateClient(rng, nextId));
     nextId += 1;
   }
-
-  setItem(STORAGE_KEYS.clients, clients);
 
   const policies: Policy[] = Array.from({ length: 25 }, (_, index) => {
     const client = pick(rng, clients);
@@ -240,10 +251,10 @@ export function ensureSeedData(): void {
       status: policyStatusFor(rng, expirationDate),
       premium: premiumForType(rng, product),
       producer: pick(rng, PRODUCERS),
+      isDemo: true,
     };
   });
   nextId += policies.length;
-  setItem(STORAGE_KEYS.policies, policies);
 
   const leads: Lead[] = Array.from({ length: 20 }, (_, index) => {
     const client = rng() > 0.4 ? pick(rng, clients) : null;
@@ -261,10 +272,10 @@ export function ensureSeedData(): void {
       lastContact: isoDaysFromNow(-randomInt(rng, 0, 30)),
       phone: randomPhone(rng),
       email: `${firstName.toLowerCase()}.${lastName.toLowerCase()}@${pick(rng, EMAIL_DOMAINS)}`,
+      isDemo: true,
     };
   });
   nextId += leads.length;
-  setItem(STORAGE_KEYS.leads, leads);
 
   const quotes: Quote[] = Array.from({ length: 15 }, (_, index) => {
     const client = pick(rng, clients);
@@ -287,10 +298,10 @@ export function ensureSeedData(): void {
         "Expired",
       ] satisfies QuoteStatus[]),
       createdAt: isoDaysFromNow(-randomInt(rng, 0, 60)),
+      isDemo: true,
     };
   });
   nextId += quotes.length;
-  setItem(STORAGE_KEYS.quotes, quotes);
 
   const tasks: Task[] = Array.from({ length: 30 }, (_, index) => {
     const client = rng() > 0.3 ? pick(rng, clients) : null;
@@ -306,23 +317,23 @@ export function ensureSeedData(): void {
       status,
       clientId: client?.id,
       clientName: client ? `${client.firstName} ${client.lastName}` : undefined,
+      isDemo: true,
     };
   });
   nextId += tasks.length;
-  setItem(STORAGE_KEYS.tasks, tasks);
 
   const documents: Document[] = [];
   let docIndex = 0;
+  const fileTypeByFolder: Record<string, string> = {
+    Applications: "pdf",
+    Declarations: "pdf",
+    "Driver Licenses": "jpg",
+    "Vehicle Photos": "jpg",
+    "Property Photos": "jpg",
+    "Commercial Documents": "pdf",
+    "Medical Documents": "pdf",
+  };
   for (const folder of DOCUMENT_FOLDERS) {
-    const fileTypeByFolder: Record<string, string> = {
-      Applications: "pdf",
-      Declarations: "pdf",
-      "Driver Licenses": "jpg",
-      "Vehicle Photos": "jpg",
-      "Property Photos": "jpg",
-      "Commercial Documents": "pdf",
-      "Medical Documents": "pdf",
-    };
     const count = randomInt(rng, 2, 4);
 
     for (let i = 0; i < count; i++) {
@@ -337,12 +348,12 @@ export function ensureSeedData(): void {
         clientName: `${client.firstName} ${client.lastName}`,
         uploadedAt: isoDaysFromNow(-randomInt(rng, 0, 200)),
         fileType,
+        isDemo: true,
       });
       docIndex += 1;
     }
   }
   nextId += documents.length;
-  setItem(STORAGE_KEYS.documents, documents);
 
   const sampleClient = pick(rng, clients);
   const notifications: Notification[] = [
@@ -352,6 +363,7 @@ export function ensureSeedData(): void {
       message: `${sampleClient.firstName} ${sampleClient.lastName}'s policy renews in 12 days.`,
       timestamp: isoDaysFromNow(-1),
       read: false,
+      isDemo: true,
     },
     {
       id: nextId + 1,
@@ -359,6 +371,7 @@ export function ensureSeedData(): void {
       message: `New task assigned: "${pick(rng, TASK_TITLES)}"`,
       timestamp: isoDaysFromNow(-1),
       read: false,
+      isDemo: true,
     },
     {
       id: nextId + 2,
@@ -366,6 +379,7 @@ export function ensureSeedData(): void {
       message: "New lead received from the website contact form.",
       timestamp: isoDaysFromNow(-2),
       read: true,
+      isDemo: true,
     },
     {
       id: nextId + 3,
@@ -373,6 +387,7 @@ export function ensureSeedData(): void {
       message: `${pick(rng, clients).firstName} accepted their auto quote.`,
       timestamp: isoDaysFromNow(-3),
       read: true,
+      isDemo: true,
     },
     {
       id: nextId + 4,
@@ -380,9 +395,9 @@ export function ensureSeedData(): void {
       message: `A policy for ${pick(rng, clients).lastName} was cancelled.`,
       timestamp: isoDaysFromNow(-4),
       read: true,
+      isDemo: true,
     },
   ];
-  setItem(STORAGE_KEYS.notifications, notifications);
 
-  setItem(STORAGE_KEYS.seeded, true);
+  return { clients, policies, leads, quotes, tasks, documents, notifications };
 }

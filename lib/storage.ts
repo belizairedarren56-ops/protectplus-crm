@@ -38,6 +38,5 @@ export const STORAGE_KEYS = {
   tasks: "protectplus-tasks",
   documents: "protectplus-documents",
   notifications: "protectplus-notifications",
-  seeded: "protectplus-seeded-v1",
   clientNotes: (clientId: number) => `protectplus-client-notes-${clientId}`,
 } as const;

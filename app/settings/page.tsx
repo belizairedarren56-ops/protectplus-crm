@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { CARRIERS } from "@/lib/constants";
 import { getItem, setItem } from "@/lib/storage";
+import { useDemoData } from "@/hooks/useDemoData";
 
 type AgencyUser = { id: string; name: string; email: string; role: string };
 
@@ -53,6 +54,7 @@ const TABS = [
   "Notification Preferences",
   "Carrier List",
   "Commission Rules",
+  "Demo Data",
 ] as const;
 
 type Tab = (typeof TABS)[number];
@@ -65,6 +67,7 @@ export default function SettingsPage() {
   const [loaded, setLoaded] = useState(false);
   const [activeTab, setActiveTab] = useState<Tab>("Agency Information");
   const [savedMessage, setSavedMessage] = useState(false);
+  const { loadDemoData, clearDemoData, hasDemoData, counts } = useDemoData();
 
   useEffect(() => {
     // localStorage read must happen post-mount (SSR has no access to it).
@@ -297,10 +300,50 @@ export default function SettingsPage() {
           </Card>
         )}
 
-        <div className="mt-6 flex items-center gap-4">
-          <Button type="submit">Save Settings</Button>
-          {savedMessage && <p className="text-sm font-bold text-emerald-400">Saved.</p>}
-        </div>
+        {activeTab === "Demo Data" && (
+          <Card className="p-6">
+            <p className="text-lg font-bold text-white">Demo Data</p>
+            <p className="mt-2 text-sm text-gray-500">
+              Populates the CRM with realistic sample clients, policies, quotes, leads, tasks, and
+              documents for exploring the app. Demo records are tagged internally, so clearing them
+              only ever removes what this tool generated — any client, policy, quote, lead, task, or
+              document you created yourself is never touched by either button below.
+            </p>
+
+            {hasDemoData ? (
+              <div className="mt-5 rounded-xl border border-white/10 bg-white/[0.02] p-4 text-sm text-gray-300">
+                <p className="font-bold text-emerald-400">Demo data is currently loaded.</p>
+                <p className="mt-1 text-gray-500">
+                  {counts.clients} clients · {counts.policies} policies · {counts.quotes} quotes ·{" "}
+                  {counts.leads} leads · {counts.tasks} tasks · {counts.documents} documents
+                </p>
+              </div>
+            ) : (
+              <p className="mt-5 text-sm text-gray-500">No demo data is currently loaded.</p>
+            )}
+
+            <div className="mt-5 flex flex-wrap gap-3">
+              <Button type="button" onClick={loadDemoData}>
+                {hasDemoData ? "Reload Demo Data" : "Load Demo Data"}
+              </Button>
+              <Button
+                type="button"
+                variant="danger"
+                onClick={clearDemoData}
+                disabled={!hasDemoData}
+              >
+                Clear Demo Data
+              </Button>
+            </div>
+          </Card>
+        )}
+
+        {activeTab !== "Demo Data" && (
+          <div className="mt-6 flex items-center gap-4">
+            <Button type="submit">Save Settings</Button>
+            {savedMessage && <p className="text-sm font-bold text-emerald-400">Saved.</p>}
+          </div>
+        )}
       </form>
     </div>
   );
