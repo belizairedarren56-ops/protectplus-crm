@@ -19,7 +19,7 @@ export type FamilyMember = {
 
 // The original app shape kept intact (id, firstName, lastName, phone, email,
 // policyType, status) so existing localStorage data keeps working. Everything
-// else is optional and backfilled by the seeder / new UI.
+// else is optional and backfilled by demo data / the newer UI.
 export type Client = {
   id: number;
   firstName: string;
@@ -37,6 +37,14 @@ export type Client = {
   insuranceTypes?: InsuranceType[];
   createdAt?: string;
   familyMembers?: FamilyMember[];
+  /** Free-text producer name for now (Phase 1 has no real user identity). */
+  producer?: string;
+  /** Set when archived via the Clients page; archived clients are hidden from
+   * the default view but never cascade-deleted. Absent/undefined = active. */
+  archivedAt?: string;
+  /** True only for records created by `loadDemoData()`, so "Clear Demo Data"
+   * can remove exactly those and never a real, user-entered record. */
+  isDemo?: boolean;
 };
 
 export type LeadStage =
@@ -71,13 +79,14 @@ export type Lead = {
   lastContact: string;
   phone?: string;
   email?: string;
+  isDemo?: boolean;
 };
 
 export type QuoteStatus = "Draft" | "Sent" | "Accepted" | "Declined" | "Expired";
 
 export type Quote = {
   id: number;
-  clientId?: number;
+  clientId: number;
   clientName: string;
   carrier: string;
   premium: number;
@@ -86,13 +95,14 @@ export type Quote = {
   insuranceType: InsuranceType;
   status: QuoteStatus;
   createdAt: string;
+  isDemo?: boolean;
 };
 
 export type PolicyStatus = "Active" | "Renewal Due" | "Cancelled" | "Expired";
 
 export type Policy = {
   id: number;
-  clientId?: number;
+  clientId: number;
   clientName: string;
   carrier: string;
   policyNumber: string;
@@ -102,6 +112,7 @@ export type Policy = {
   status: PolicyStatus;
   premium: number;
   producer: string;
+  isDemo?: boolean;
 };
 
 export type TaskStatus = "Open" | "Complete";
@@ -116,6 +127,7 @@ export type Task = {
   status: TaskStatus;
   clientId?: number;
   clientName?: string;
+  isDemo?: boolean;
 };
 
 export type DocumentFolder =
@@ -145,6 +157,7 @@ export type Document = {
   clientName?: string;
   uploadedAt: string;
   fileType: string;
+  isDemo?: boolean;
 };
 
 export type NotificationType = "renewal" | "task" | "lead" | "quote" | "policy";
@@ -155,4 +168,5 @@ export type Notification = {
   message: string;
   timestamp: string;
   read: boolean;
+  isDemo?: boolean;
 };
