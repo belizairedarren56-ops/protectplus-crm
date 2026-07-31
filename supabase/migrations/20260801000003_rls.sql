@@ -99,6 +99,15 @@ alter table activity_log enable row level security;
 -- against its previous value (WITH CHECK only sees the new row). These
 -- triggers do that part: non-admins can only ever create rows owned by
 -- themselves, and only an admin can reassign an existing row's owner.
+--
+-- Every one of these starts with `if auth.uid() is null then return ...`.
+-- BYPASSRLS (which service_role has) skips *policy* checks but never skips
+-- triggers — auth.uid() reads a JWT claim that a service-role connection
+-- simply doesn't have, so without this guard these triggers would silently
+-- null out producer_id/assigned_to on every service-role write (migrations,
+-- scripts/bootstrap-admin.ts, backend jobs). A NULL auth.uid() means "no
+-- authenticated end-user session" — already a strictly more trusted context
+-- than anything RLS mediates, so it's correct to trust the value as given.
 
 create or replace function default_and_guard_client_producer()
 returns trigger
@@ -107,6 +116,10 @@ security definer
 set search_path = ''
 as $$
 begin
+  if auth.uid() is null then
+    return new;
+  end if;
+
   if new.assigned_producer_id is null then
     new.assigned_producer_id = auth.uid();
   elsif not public.is_admin() and new.assigned_producer_id <> auth.uid() then
@@ -123,6 +136,10 @@ security definer
 set search_path = ''
 as $$
 begin
+  if auth.uid() is null then
+    return new;
+  end if;
+
   if not public.is_admin() and old.assigned_producer_id is distinct from new.assigned_producer_id then
     raise exception 'Only an admin can reassign a client''s producer';
   end if;
@@ -144,6 +161,7 @@ create trigger prevent_client_producer_reassignment before update on clients
 create or replace function force_owner_leads()
 returns trigger language plpgsql security definer set search_path = '' as $$
 begin
+  if auth.uid() is null then return new; end if;
   if not public.is_admin() then new.producer_id = auth.uid(); end if;
   return new;
 end;
@@ -151,6 +169,7 @@ $$;
 create or replace function guard_reassign_leads()
 returns trigger language plpgsql security definer set search_path = '' as $$
 begin
+  if auth.uid() is null then return new; end if;
   if not public.is_admin() and old.producer_id is distinct from new.producer_id then
     raise exception 'Only an admin can reassign a lead''s producer';
   end if;
@@ -161,6 +180,7 @@ $$;
 create or replace function force_owner_quotes()
 returns trigger language plpgsql security definer set search_path = '' as $$
 begin
+  if auth.uid() is null then return new; end if;
   if not public.is_admin() then new.producer_id = auth.uid(); end if;
   return new;
 end;
@@ -168,6 +188,7 @@ $$;
 create or replace function guard_reassign_quotes()
 returns trigger language plpgsql security definer set search_path = '' as $$
 begin
+  if auth.uid() is null then return new; end if;
   if not public.is_admin() and old.producer_id is distinct from new.producer_id then
     raise exception 'Only an admin can reassign a quote''s producer';
   end if;
@@ -178,6 +199,7 @@ $$;
 create or replace function force_owner_policies()
 returns trigger language plpgsql security definer set search_path = '' as $$
 begin
+  if auth.uid() is null then return new; end if;
   if not public.is_admin() then new.producer_id = auth.uid(); end if;
   return new;
 end;
@@ -185,6 +207,7 @@ $$;
 create or replace function guard_reassign_policies()
 returns trigger language plpgsql security definer set search_path = '' as $$
 begin
+  if auth.uid() is null then return new; end if;
   if not public.is_admin() and old.producer_id is distinct from new.producer_id then
     raise exception 'Only an admin can reassign a policy''s producer';
   end if;
@@ -195,6 +218,7 @@ $$;
 create or replace function force_owner_tasks()
 returns trigger language plpgsql security definer set search_path = '' as $$
 begin
+  if auth.uid() is null then return new; end if;
   if not public.is_admin() then new.assigned_to = auth.uid(); end if;
   return new;
 end;
@@ -202,6 +226,7 @@ $$;
 create or replace function guard_reassign_tasks()
 returns trigger language plpgsql security definer set search_path = '' as $$
 begin
+  if auth.uid() is null then return new; end if;
   if not public.is_admin() and old.assigned_to is distinct from new.assigned_to then
     raise exception 'Only an admin can reassign a task';
   end if;
@@ -250,6 +275,10 @@ security definer
 set search_path = ''
 as $$
 begin
+  if auth.uid() is null then
+    return new;
+  end if;
+
   if not public.is_admin() and new.role is distinct from old.role then
     raise exception 'Only an admin can change a user role';
   end if;
