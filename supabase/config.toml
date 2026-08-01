@@ -221,9 +221,21 @@ web3 = 30
 
 [auth.email]
 # Allow/disallow new user signups via email to your project.
-# Same reasoning as the top-level [auth] enable_signup — admin-created
-# accounts only.
-enable_signup = false
+#
+# Deliberately left `true`, unlike the top-level [auth] enable_signup.
+# Verified against a real local Supabase instance in CI: setting *both* to
+# false doesn't just block signup — GoTrue's local emulator disables the
+# email provider entirely, including signInWithPassword for existing
+# accounts (`AuthApiError: Email logins are disabled`,
+# code: email_provider_disabled). That would break the login page for
+# every admin-created account too, which contradicts "accounts must remain
+# admin-created only" (an admin-created account still needs to be able to
+# log in). The top-level [auth] enable_signup = false is the actual gate on
+# the public self-serve signup endpoint (what anon.auth.signUp() hits) and
+# is sufficient alone — admin.auth.admin.createUser() never touches that
+# endpoint, and existing accounts can still authenticate. Verified by
+# tests/rls/auth-signup.test.ts.
+enable_signup = true
 # If enabled, a user will be required to confirm any email change on both the old, and new email
 # addresses. If disabled, only the new email is required to confirm.
 double_confirm_changes = true
