@@ -66,7 +66,21 @@ describe("Documents page — sensitive folder flag", () => {
     process.env[ENV_KEY] = "true";
     render(<DocumentsPage />);
 
-    expect(await screen.findByText("Driver Licenses")).toBeInTheDocument();
-    expect(screen.getByText("Medical Documents")).toBeInTheDocument();
+    // Matches both the folder card and, now that sensitive documents are no
+    // longer filtered out of the table, the document row's folder column.
+    expect((await screen.findAllByText("Driver Licenses")).length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Medical Documents").length).toBeGreaterThan(0);
+  });
+
+  it("includes hidden-folder documents in 'All Documents' once explicitly enabled", async () => {
+    process.env[ENV_KEY] = "true";
+    render(<DocumentsPage />);
+
+    expect(await screen.findByText("license.jpg")).toBeInTheDocument();
+    expect(screen.getByText("medical-form.pdf")).toBeInTheDocument();
+    expect(screen.getByText("application.pdf")).toBeInTheDocument();
+    // The "All Documents" card should report all three, not just the
+    // non-sensitive one.
+    expect(screen.getByText("3 files")).toBeInTheDocument();
   });
 });

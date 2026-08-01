@@ -7,7 +7,11 @@ import { Card } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Table, TableColumn } from "@/components/ui/Table";
 import { useDocuments } from "@/hooks/useDocuments";
-import { isSensitiveDocumentFolder, visibleDocumentFolders } from "@/lib/config";
+import {
+  isSensitiveDocumentFolder,
+  sensitiveDocumentFoldersEnabled,
+  visibleDocumentFolders,
+} from "@/lib/config";
 import { DOCUMENT_FOLDER_ICONS } from "@/lib/constants";
 import { formatDate } from "@/lib/format";
 import type { Document, DocumentFolder } from "@/types";
@@ -19,7 +23,9 @@ export default function DocumentsPage() {
   // Filtered at the data level, not just the folder-picker UI — a hidden
   // folder must not leak its contents into "All Documents" either.
   const folders = visibleDocumentFolders();
-  const accessibleDocuments = documents.filter((document) => !isSensitiveDocumentFolder(document.folder));
+  const accessibleDocuments = sensitiveDocumentFoldersEnabled()
+    ? documents
+    : documents.filter((document) => !isSensitiveDocumentFolder(document.folder));
 
   const visibleDocuments = selectedFolder
     ? accessibleDocuments.filter((document) => document.folder === selectedFolder)
