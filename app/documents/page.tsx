@@ -7,18 +7,23 @@ import { Card } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Table, TableColumn } from "@/components/ui/Table";
 import { useDocuments } from "@/hooks/useDocuments";
+import { isSensitiveDocumentFolder, visibleDocumentFolders } from "@/lib/config";
 import { DOCUMENT_FOLDER_ICONS } from "@/lib/constants";
 import { formatDate } from "@/lib/format";
-import { DOCUMENT_FOLDERS } from "@/types";
 import type { Document, DocumentFolder } from "@/types";
 
 export default function DocumentsPage() {
   const { documents, setDocuments, documentsLoaded } = useDocuments();
   const [selectedFolder, setSelectedFolder] = useState<DocumentFolder | null>(null);
 
+  // Filtered at the data level, not just the folder-picker UI — a hidden
+  // folder must not leak its contents into "All Documents" either.
+  const folders = visibleDocumentFolders();
+  const accessibleDocuments = documents.filter((document) => !isSensitiveDocumentFolder(document.folder));
+
   const visibleDocuments = selectedFolder
-    ? documents.filter((document) => document.folder === selectedFolder)
-    : documents;
+    ? accessibleDocuments.filter((document) => document.folder === selectedFolder)
+    : accessibleDocuments;
 
   function addPlaceholder(folder: DocumentFolder) {
     const extension = folder === "Driver Licenses" || folder.includes("Photos") ? "jpg" : "pdf";
@@ -88,11 +93,11 @@ export default function DocumentsPage() {
         >
           <span className="text-2xl">🗂️</span>
           <p className="mt-3 font-bold text-white">All Documents</p>
-          <p className="mt-1 text-sm text-gray-500">{documents.length} files</p>
+          <p className="mt-1 text-sm text-gray-500">{accessibleDocuments.length} files</p>
         </button>
 
-        {DOCUMENT_FOLDERS.map((folder) => {
-          const count = documents.filter((document) => document.folder === folder).length;
+        {folders.map((folder) => {
+          const count = accessibleDocuments.filter((document) => document.folder === folder).length;
 
           return (
             <button
