@@ -71,6 +71,11 @@ export function mapRowToClient(row: ClientRow): Client {
   };
 }
 
+// For create() only — every field a real new row needs, with defaults
+// (is_demo defaults false, insurance_types falls back to a single-item
+// array from policyType). Do NOT reuse this for update(): defaulting
+// is_demo here means a partial update patch would silently reset an
+// existing demo client's is_demo back to false on every save.
 function mapInputToRow(input: NewClientInput): Database["public"]["Tables"]["clients"]["Insert"] {
   return {
     first_name: input.firstName,
@@ -88,6 +93,30 @@ function mapInputToRow(input: NewClientInput): Database["public"]["Tables"]["cli
     assigned_producer_id: input.assignedProducerId,
     is_demo: input.isDemo ?? false,
   } as Database["public"]["Tables"]["clients"]["Insert"];
+}
+
+// For update() — only the fields actually present in the patch, so a
+// partial update (e.g. just { status: "Active" }) can never overwrite an
+// untouched column with an incidental default.
+function mapPatchToRow(patch: Partial<NewClientInput>): Database["public"]["Tables"]["clients"]["Update"] {
+  const row: Database["public"]["Tables"]["clients"]["Update"] = {};
+  if (patch.firstName !== undefined) row.first_name = patch.firstName;
+  if (patch.lastName !== undefined) row.last_name = patch.lastName;
+  if (patch.phone !== undefined) row.phone = patch.phone;
+  if (patch.email !== undefined) row.email = patch.email;
+  if (patch.status !== undefined) {
+    row.status = patch.status as Database["public"]["Tables"]["clients"]["Row"]["status"];
+  }
+  if (patch.address !== undefined) row.address = patch.address;
+  if (patch.city !== undefined) row.city = patch.city;
+  if (patch.state !== undefined) row.state = patch.state;
+  if (patch.zip !== undefined) row.zip = patch.zip;
+  if (patch.carrier !== undefined) row.carrier = patch.carrier;
+  if (patch.policyNumber !== undefined) row.policy_number = patch.policyNumber;
+  if (patch.insuranceTypes !== undefined) row.insurance_types = patch.insuranceTypes;
+  if (patch.assignedProducerId !== undefined) row.assigned_producer_id = patch.assignedProducerId;
+  if (patch.isDemo !== undefined) row.is_demo = patch.isDemo;
+  return row;
 }
 
 // Ambiguous otherwise: `clients` has three FKs to `profiles`
@@ -179,7 +208,7 @@ export function createClientsRepository(supabase: SupabaseClient<Database>): Cli
     try {
       const { data, error } = await supabase
         .from("clients")
-        .update(mapInputToRow(patch as NewClientInput))
+        .update(mapPatchToRow(patch))
         .eq("id", id)
         .select(SELECT_WITH_PRODUCER)
         .single();
