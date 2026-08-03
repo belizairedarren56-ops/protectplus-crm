@@ -30,6 +30,12 @@ test.describe("clients — supabase mode", () => {
   test("creating, listing, archiving, and restoring a client round-trips through Supabase", async ({
     page,
   }) => {
+    // Temporary diagnostic (Phase 3A round 4): rounds 2-3 both hit "Test
+    // timeout of 30000ms exceeded" with the page/context torn down mid-
+    // diagnostic — the 30s default was too tight to get a clean read.
+    // Widened so a real result comes back instead of a truncated one.
+    test.setTimeout(60_000);
+
     const uniqueLastName = `E2E-${Date.now()}`;
 
     await page.goto("/clients");
@@ -64,11 +70,13 @@ test.describe("clients — supabase mode", () => {
     });
 
     // Reload — proves the client was actually persisted server-side, not
-    // just held in an optimistic client-only cache.
+    // just held in an optimistic client-only cache. Deliberately NOT using
+    // waitForLoadState("networkidle") here — Playwright's own docs discourage
+    // it, since it never resolves while any persistent connection (e.g. a
+    // websocket) stays open, which is exactly what stalled rounds 2-3.
     await page.reload();
-    await page.waitForLoadState("networkidle").catch(() => {});
     const urlAfterReload = page.url();
-    const clientVisible = await page.getByText(clientName).isVisible({ timeout: 8000 }).catch(() => false);
+    const clientVisible = await page.getByText(clientName).isVisible({ timeout: 10_000 }).catch(() => false);
     if (!clientVisible) {
       const errorText = await page
         .getByText(/Could not load clients/)
@@ -79,7 +87,6 @@ test.describe("clients — supabase mode", () => {
         .isVisible()
         .catch(() => false);
       const bodySnippet = (await page.locator("body").innerText().catch(() => "")).slice(0, 1500);
-      await page.waitForTimeout(500); // let any in-flight response.text() promises above settle
       throw new Error(
         `Client not visible after reload. url=${urlAfterReload} errorText=${JSON.stringify(errorText)} loadingVisible=${loadingVisible} bodySnippet=${JSON.stringify(bodySnippet)} failedResponses=${JSON.stringify(failedResponses)}`
       );
