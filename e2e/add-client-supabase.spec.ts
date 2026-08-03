@@ -45,9 +45,34 @@ test.describe("clients — supabase mode", () => {
     const clientName = `Supabase ${uniqueLastName}`;
     await expect(page.getByText(clientName)).toBeVisible();
 
+    // Temporary diagnostic (Phase 3A round 5): the "unknown"-sentinel bug in
+    // AccessScopeProvider (fixed) explained the earlier hangs, but the core
+    // reload failure persisted after that fix (in a much faster run), so
+    // there's a second issue. Capture failing responses to find it.
+    const failedResponses: string[] = [];
+    page.on("response", (response) => {
+      if (response.status() >= 400) {
+        response
+          .text()
+          .then((body) => failedResponses.push(`${response.status()} ${response.url()} :: ${body.slice(0, 800)}`))
+          .catch(() => failedResponses.push(`${response.status()} ${response.url()} :: <unreadable body>`));
+      }
+    });
+
     // Reload — proves the client was actually persisted server-side, not
     // just held in an optimistic client-only cache.
     await page.reload();
+    const clientVisible = await page.getByText(clientName).isVisible({ timeout: 8000 }).catch(() => false);
+    if (!clientVisible) {
+      const errorText = await page
+        .getByText(/Could not load clients/)
+        .textContent()
+        .catch(() => null);
+      const bodySnippet = (await page.locator("body").innerText().catch(() => "")).slice(0, 1500);
+      throw new Error(
+        `Client not visible after reload. errorText=${JSON.stringify(errorText)} bodySnippet=${JSON.stringify(bodySnippet)} failedResponses=${JSON.stringify(failedResponses)}`
+      );
+    }
     await expect(page.getByText(clientName)).toBeVisible();
 
     // Archive.
