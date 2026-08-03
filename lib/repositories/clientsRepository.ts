@@ -76,8 +76,23 @@ export function mapRowToClient(row: ClientRow): Client {
 // array from policyType). Do NOT reuse this for update(): defaulting
 // is_demo here means a partial update patch would silently reset an
 // existing demo client's is_demo back to false on every save.
-function mapInputToRow(input: NewClientInput): Database["public"]["Tables"]["clients"]["Insert"] {
+//
+// agency_id is required here, not derived from the input or the Supabase
+// session: clients.agency_id is NOT NULL with no column default, and unlike
+// assigned_producer_id there is no ownership-guard trigger that fills it in
+// server-side — RLS's clients_insert policy only *validates* agency_id
+// against current_agency_id(), it never populates it. Omitting this field
+// previously compiled cleanly only because the return value was force-cast
+// to the Insert type, silently hiding the missing required property; a real
+// createClientsRepository() call against Postgres fails with a NOT NULL
+// violation without it (caught by tests/repositories/clientsRepository.test.ts
+// running against real local Supabase in CI).
+function mapInputToRow(
+  input: NewClientInput,
+  agencyId: string
+): Database["public"]["Tables"]["clients"]["Insert"] {
   return {
+    agency_id: agencyId,
     first_name: input.firstName,
     last_name: input.lastName,
     phone: input.phone,
@@ -153,7 +168,7 @@ function mapUnknownError(error: unknown): DataBackendError {
 // migration script (service-role key, Node-only), and repository
 // integration tests (a signed-in test-user client for the behavior under
 // test, a service-role client only for fixture setup/teardown).
-export function createClientsRepository(supabase: SupabaseClient<Database>): ClientsRepository {
+export function createClientsRepository(supabase: SupabaseClient<Database>, agencyId: string): ClientsRepository {
   async function list(): Promise<Result<Client[], DataBackendError>> {
     try {
       // Both active and archived clients — the UI does its own Active/
@@ -190,7 +205,7 @@ export function createClientsRepository(supabase: SupabaseClient<Database>): Cli
     try {
       const { data, error } = await supabase
         .from("clients")
-        .insert(mapInputToRow(input))
+        .insert(mapInputToRow(input, agencyId))
         .select(SELECT_WITH_PRODUCER)
         .single();
 
@@ -256,7 +271,7 @@ export function createClientsRepository(supabase: SupabaseClient<Database>): Cli
     try {
       const { data, error } = await supabase
         .from("clients")
-        .insert(inputs.map((input) => mapInputToRow({ ...input, isDemo: true })))
+        .insert(inputs.map((input) => mapInputToRow({ ...input, isDemo: true }, agencyId)))
         .select(SELECT_WITH_PRODUCER);
 
       if (error) return { ok: false, error: mapPostgrestError(error) };

@@ -30,7 +30,7 @@ export function clientsQueryKey(scope: AccessScope) {
 function getClientsRepository(scope: AccessScope): ClientsRepository {
   if (scope.status !== "ready") return unavailableClientsRepository;
   if (scope.backend === "demo") return demoClientsRepository;
-  return createClientsRepository(scope.supabaseClient);
+  return createClientsRepository(scope.supabaseClient, scope.agencyId);
 }
 
 export type ClientsApi = {

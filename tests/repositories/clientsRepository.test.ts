@@ -37,7 +37,7 @@ afterAll(async () => {
 
 describe("createClientsRepository — agency/producer isolation through the real repository", () => {
   it("a producer's create() defaults assigned_producer_id to themselves", async () => {
-    const repoA = createClientsRepository(producerA.client);
+    const repoA = createClientsRepository(producerA.client, agencyId);
     const result = await repoA.create({
       firstName: "Owned",
       lastName: "ByA",
@@ -52,9 +52,9 @@ describe("createClientsRepository — agency/producer isolation through the real
   });
 
   it("a producer only lists their own clients; an admin lists everyone's", async () => {
-    const repoA = createClientsRepository(producerA.client);
-    const repoB = createClientsRepository(producerB.client);
-    const repoAdmin = createClientsRepository(adminUser.client);
+    const repoA = createClientsRepository(producerA.client, agencyId);
+    const repoB = createClientsRepository(producerB.client, agencyId);
+    const repoAdmin = createClientsRepository(adminUser.client, agencyId);
 
     await repoA.create({
       firstName: "Visible",
@@ -84,7 +84,7 @@ describe("createClientsRepository — agency/producer isolation through the real
   });
 
   it("a producer cannot assign a new client to a different producer", async () => {
-    const repoA = createClientsRepository(producerA.client);
+    const repoA = createClientsRepository(producerA.client, agencyId);
     const result = await repoA.create({
       firstName: "Reassign",
       lastName: "Attempt",
@@ -100,7 +100,7 @@ describe("createClientsRepository — agency/producer isolation through the real
   });
 
   it("an admin can assign a new client to a specific producer", async () => {
-    const repoAdmin = createClientsRepository(adminUser.client);
+    const repoAdmin = createClientsRepository(adminUser.client, agencyId);
     const result = await repoAdmin.create({
       firstName: "Admin",
       lastName: "Assigned",
@@ -116,7 +116,7 @@ describe("createClientsRepository — agency/producer isolation through the real
   });
 
   it("archive then restore round-trips archivedAt", async () => {
-    const repoA = createClientsRepository(producerA.client);
+    const repoA = createClientsRepository(producerA.client, agencyId);
     const created = await repoA.create({
       firstName: "Archive",
       lastName: "Me",
@@ -140,14 +140,14 @@ describe("createClientsRepository — agency/producer isolation through the real
 
 describe("clear_agency_demo_clients() RPC — admin-only, never touches non-demo rows", () => {
   it("rejects a non-admin caller outright", async () => {
-    const repoA = createClientsRepository(producerA.client);
+    const repoA = createClientsRepository(producerA.client, agencyId);
     const result = await repoA.clearAgencyDemoClients();
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error.kind).toBe("denied");
   });
 
   it("never removes a non-demo row, even when called correctly by an admin", async () => {
-    const repoAdmin = createClientsRepository(adminUser.client);
+    const repoAdmin = createClientsRepository(adminUser.client, agencyId);
     const created = await repoAdmin.create({
       firstName: "Real",
       lastName: "NotDemo",
@@ -168,7 +168,7 @@ describe("clear_agency_demo_clients() RPC — admin-only, never touches non-demo
   });
 
   it("removes demo rows when called correctly by an admin", async () => {
-    const repoAdmin = createClientsRepository(adminUser.client);
+    const repoAdmin = createClientsRepository(adminUser.client, agencyId);
     const batch = await repoAdmin.createDemoBatch([
       {
         firstName: "Demo",
