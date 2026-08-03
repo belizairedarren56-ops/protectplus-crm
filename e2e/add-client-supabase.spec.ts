@@ -45,14 +45,20 @@ test.describe("clients — supabase mode", () => {
     const clientName = `Supabase ${uniqueLastName}`;
     await expect(page.getByText(clientName)).toBeVisible();
 
+    // Temporary diagnostic (Phase 3A round 2): round 1 showed an entirely
+    // empty <body> after reload (no error banner, no loading text) — buffer
+    // console/page errors and the post-reload URL to see whether this is a
+    // redirect (e.g. back to /login), a crashed render, or a timing race.
+    const consoleLogs: string[] = [];
+    page.on("console", (msg) => consoleLogs.push(`[console:${msg.type()}] ${msg.text()}`));
+    page.on("pageerror", (err) => consoleLogs.push(`[pageerror] ${err.message}`));
+
     // Reload — proves the client was actually persisted server-side, not
     // just held in an optimistic client-only cache.
     await page.reload();
-    // Temporary diagnostic (Phase 3A): this assertion was failing in CI with
-    // no visibility into whether the page shows an error banner, is stuck
-    // loading, or genuinely renders an empty list. Surfaces that state in
-    // the thrown message so it appears in the CI failure annotation.
-    const clientVisible = await page.getByText(clientName).isVisible({ timeout: 5000 }).catch(() => false);
+    await page.waitForLoadState("networkidle").catch(() => {});
+    const urlAfterReload = page.url();
+    const clientVisible = await page.getByText(clientName).isVisible({ timeout: 8000 }).catch(() => false);
     if (!clientVisible) {
       const errorText = await page
         .getByText(/Could not load clients/)
@@ -64,7 +70,7 @@ test.describe("clients — supabase mode", () => {
         .catch(() => false);
       const bodySnippet = (await page.locator("body").innerText().catch(() => "")).slice(0, 1500);
       throw new Error(
-        `Client not visible after reload. errorText=${JSON.stringify(errorText)} loadingVisible=${loadingVisible} bodySnippet=${JSON.stringify(bodySnippet)}`
+        `Client not visible after reload. url=${urlAfterReload} errorText=${JSON.stringify(errorText)} loadingVisible=${loadingVisible} bodySnippet=${JSON.stringify(bodySnippet)} console=${JSON.stringify(consoleLogs.slice(0, 20))}`
       );
     }
     await expect(page.getByText(clientName)).toBeVisible();
