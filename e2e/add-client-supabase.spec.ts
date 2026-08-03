@@ -30,12 +30,6 @@ test.describe("clients — supabase mode", () => {
   test("creating, listing, archiving, and restoring a client round-trips through Supabase", async ({
     page,
   }) => {
-    // Temporary diagnostic (Phase 3A round 4): rounds 2-3 both hit "Test
-    // timeout of 30000ms exceeded" with the page/context torn down mid-
-    // diagnostic — the 30s default was too tight to get a clean read.
-    // Widened so a real result comes back instead of a truncated one.
-    test.setTimeout(60_000);
-
     const uniqueLastName = `E2E-${Date.now()}`;
 
     await page.goto("/clients");
@@ -51,46 +45,9 @@ test.describe("clients — supabase mode", () => {
     const clientName = `Supabase ${uniqueLastName}`;
     await expect(page.getByText(clientName)).toBeVisible();
 
-    // Temporary diagnostic (Phase 3A round 3): round 2 showed a 400 network
-    // error and a URL that stayed on /clients (not a redirect), but the
-    // console message alone didn't say which request failed. Capture the
-    // exact URL + response body of every failing (>=400) response.
-    const failedResponses: string[] = [];
-    page.on("response", (response) => {
-      if (response.status() >= 400) {
-        response
-          .text()
-          .then((body) => {
-            failedResponses.push(`${response.status()} ${response.url()} :: ${body.slice(0, 800)}`);
-          })
-          .catch(() => {
-            failedResponses.push(`${response.status()} ${response.url()} :: <unreadable body>`);
-          });
-      }
-    });
-
     // Reload — proves the client was actually persisted server-side, not
-    // just held in an optimistic client-only cache. Deliberately NOT using
-    // waitForLoadState("networkidle") here — Playwright's own docs discourage
-    // it, since it never resolves while any persistent connection (e.g. a
-    // websocket) stays open, which is exactly what stalled rounds 2-3.
+    // just held in an optimistic client-only cache.
     await page.reload();
-    const urlAfterReload = page.url();
-    const clientVisible = await page.getByText(clientName).isVisible({ timeout: 10_000 }).catch(() => false);
-    if (!clientVisible) {
-      const errorText = await page
-        .getByText(/Could not load clients/)
-        .textContent()
-        .catch(() => null);
-      const loadingVisible = await page
-        .getByText(/Loading clients/)
-        .isVisible()
-        .catch(() => false);
-      const bodySnippet = (await page.locator("body").innerText().catch(() => "")).slice(0, 1500);
-      throw new Error(
-        `Client not visible after reload. url=${urlAfterReload} errorText=${JSON.stringify(errorText)} loadingVisible=${loadingVisible} bodySnippet=${JSON.stringify(bodySnippet)} failedResponses=${JSON.stringify(failedResponses)}`
-      );
-    }
     await expect(page.getByText(clientName)).toBeVisible();
 
     // Archive.

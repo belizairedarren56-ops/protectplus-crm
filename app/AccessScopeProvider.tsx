@@ -71,8 +71,15 @@ export function AccessScopeProvider({ backend, children }: { backend: DataBacken
 
   const profileQuery = useQuery({
     queryKey: ["own-profile", authUserId],
+    // authUserId !== "unknown" (not just typeof === "string") — "unknown" is
+    // itself a string, so typeof alone let this fire with the literal text
+    // "unknown" as the user id before onAuthStateChange's first real event
+    // arrived, producing a genuine invalid-uuid 400 from Postgres on every
+    // load. Usually self-corrected fast enough to be invisible once the real
+    // auth event landed, but not reliably — caught via a real browser flake
+    // in CI (rendered PostgREST's literal 22P02 error).
     queryFn:
-      supabase && typeof authUserId === "string"
+      supabase && authUserId !== "unknown" && authUserId !== null
         ? () => fetchOwnProfile(supabase, authUserId)
         : skipToken,
   });
