@@ -48,6 +48,25 @@ test.describe("clients — supabase mode", () => {
     // Reload — proves the client was actually persisted server-side, not
     // just held in an optimistic client-only cache.
     await page.reload();
+    // Temporary diagnostic (Phase 3A): this assertion was failing in CI with
+    // no visibility into whether the page shows an error banner, is stuck
+    // loading, or genuinely renders an empty list. Surfaces that state in
+    // the thrown message so it appears in the CI failure annotation.
+    const clientVisible = await page.getByText(clientName).isVisible({ timeout: 5000 }).catch(() => false);
+    if (!clientVisible) {
+      const errorText = await page
+        .getByText(/Could not load clients/)
+        .textContent()
+        .catch(() => null);
+      const loadingVisible = await page
+        .getByText(/Loading clients/)
+        .isVisible()
+        .catch(() => false);
+      const bodySnippet = (await page.locator("body").innerText().catch(() => "")).slice(0, 1500);
+      throw new Error(
+        `Client not visible after reload. errorText=${JSON.stringify(errorText)} loadingVisible=${loadingVisible} bodySnippet=${JSON.stringify(bodySnippet)}`
+      );
+    }
     await expect(page.getByText(clientName)).toBeVisible();
 
     // Archive.
