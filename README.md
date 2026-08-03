@@ -4,11 +4,15 @@ An internal CRM for a small insurance agency: clients, leads, quotes, policies,
 tasks, a document center, reports, and settings. Built with Next.js (App
 Router) and TypeScript.
 
-**Current data layer: `localStorage`, single browser, no authentication.**
-There is no backend yet — every record lives in the browser that created it.
-Do not enter real client, policy, or financial data. See
-[Architecture](#architecture) and [Roadmap](#roadmap) below for what that
-means in practice and what's planned to change it.
+**Current data layer: `clients` is backed by Supabase in `supabase` mode
+(real auth, real Row Level Security); every other entity (leads, quotes,
+policies, tasks, documents, notes, notifications) is still `localStorage`,
+single browser.** Which mode is active is an explicit choice —
+`NEXT_PUBLIC_DATA_BACKEND=demo|supabase` (see `.env.example`) — not
+auto-detected from whether Supabase is configured. Do not enter real client,
+policy, or financial data outside a properly access-controlled, hosted
+deployment. See [Architecture](#architecture) and [Roadmap](#roadmap) below
+for what that means in practice and what's planned to change it.
 
 ## Getting started
 
@@ -59,16 +63,29 @@ e2e/                   Playwright specs
 **/__tests__/          Vitest specs, colocated with what they test
 ```
 
-**Data flow.** Every entity (`Client`, `Lead`, `Quote`, `Policy`, `Task`,
-`Document`, `Notification`) has its own hook in `hooks/` that loads from and
-saves to a dedicated `localStorage` key (see `lib/storage.ts`'s
-`STORAGE_KEYS`). Pages call these hooks directly and get back
-`{ items, setItems, loaded }`-shaped state — there is no shared store or
-context, so two components each calling the same hook hold independent state,
-synced only through `localStorage`, not live between each other. In practice
-this is safe because only one component "writes" to a given entity at a time
-in the current UI (see `hooks/useDemoData.ts`'s comment for the one place this
-mattered).
+**Data flow — `clients` (Supabase-backed, both modes go through one hook).**
+`hooks/useClients()` always calls the same TanStack Query hooks regardless of
+backend; only the *repository* it queries through is selected by a plain
+function (`lib/repositories/clientsRepository.ts`'s factory in `supabase`
+mode, `lib/repositories/demoClientsRepository.ts` — a hook-free wrapper
+around `localStorage` — in `demo` mode). Both backends share one query
+cache, keyed by the current access scope (`hooks/useAccessScope.ts`), so
+every consumer reads from the same source of truth instead of an independent
+local copy. Repository methods return a typed `Result<T, Error>` rather than
+throwing; `lib/result.ts`'s `unwrap()` is the one place that gets translated
+into the throw/reject TanStack Query actually needs.
+
+**Data flow — everything else (`Lead`, `Quote`, `Policy`, `Task`, `Document`,
+`Notification`, `client_notes`).** Still `localStorage`-backed, one hook per
+entity in `hooks/`, all thin wrappers around `useLocalStorageList`. In
+`demo` mode the storage key is the same static name it's always been; in
+`supabase` mode it's scoped by the full signed-in identity
+(`lib/scopedStorage.ts`) so two different people on the same shared browser
+never read or write each other's still-local data, even though `clients`
+itself is already protected by real Supabase RLS. A one-time, versioned,
+crash-recoverable migration (`lib/localDataMigrations.ts`) converts a
+browser's pre-existing numeric-id data to the current string-id shape the
+first time it loads; the original data is never mutated, only read.
 
 **Demo data vs. real data.** `lib/demoData.ts` exports pure generator
 functions — they return data, they never touch storage. `hooks/useDemoData.ts`
@@ -95,22 +112,28 @@ policies, quotes, tasks, notes, or documents. Restoring clears the flag.
 
 ## Roadmap
 
-This is Phase 1 of a larger plan to move off `localStorage` onto a real
-database with authentication and role-based access (producers only seeing
-their own assigned clients/leads/policies/quotes/tasks, admins seeing
-everything). That plan — schema, row-level security, migration strategy, and
-a phased cutover that keeps the current UI intact — lives outside this repo
-in the project's planning docs; ask before assuming any Supabase/auth code
-exists yet, because as of this Phase it doesn't. Known, deliberate
-limitations of the current phase:
+Phase 1 (UI, `localStorage`) and Phase 2 (Supabase schema/RLS/auth
+foundation) are complete. **Phase 3A (this phase) migrates `clients` off
+`localStorage` onto Supabase** — real auth, real Row Level Security,
+producers only seeing their own assigned clients, admins seeing the whole
+agency. Every other entity is still `localStorage`, staged for its own
+future phase (`policies`/`quotes`/`tasks`/`documents`/`client_notes`/
+`family_members`, then `leads`, then `notifications`, then agency settings —
+see the Phase 3 planning doc). Known, deliberate limitations of the current
+phase:
 
-- No authentication or access control of any kind.
-- No backups, audit log, or way to recover data if a browser's storage is
-  cleared.
-- Quotes and policies require picking a real client from a dropdown (so they
-  always have a valid `clientId`), but producer/assignee fields elsewhere are
-  still free-text strings, not real user references — that only makes sense
-  once real accounts exist.
+- `NEXT_PUBLIC_DATA_BACKEND=demo` (the default outside production) behaves
+  exactly like before — no Supabase involved at all for anyone who hasn't
+  explicitly opted into `supabase` mode.
+- Only `clients` is Supabase-backed; `leads`/`quotes`/`policies`/`tasks`/
+  `documents`/`notifications`/`client_notes` remain `localStorage`, now
+  scoped per signed-in identity in `supabase` mode (see Architecture above)
+  but not yet backed by a real database or shared between users.
+- No permanent-delete UI for clients — archive/restore only, same as before.
+  A real permanent-delete path (admin-only, audited) is a future phase.
+- Producer/assignee fields on the still-local entities (policies, quotes,
+  tasks) remain free-text strings, not real user references — only
+  `clients.assignedProducerId` is a real `profiles` reference so far.
 - `npm audit` currently reports high-severity findings inside `next`'s and
   `eslint`'s own dependency trees (`postcss`, `sharp`, `minimatch`). The
   suggested `npm audit fix --force` would downgrade `next` to `9.3.3` — do

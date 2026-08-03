@@ -8,6 +8,10 @@ on:
 jobs:
   lint-typecheck-test:
     runs-on: ubuntu-latest
+    env:
+      # vitest.setup.ts already sets this per-test; declared here too for
+      # explicit, declarative consistency across every CI job (Phase 3A).
+      NEXT_PUBLIC_DATA_BACKEND: demo
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -32,6 +36,11 @@ jobs:
 
   e2e:
     runs-on: ubuntu-latest
+    env:
+      # playwright.config.ts builds+starts a production server in CI, which
+      # means `next build`'s NODE_ENV=production fail-closed check applies —
+      # this must be set explicitly here (Phase 3A).
+      NEXT_PUBLIC_DATA_BACKEND: demo
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -50,6 +59,11 @@ jobs:
 
   build:
     runs-on: ubuntu-latest
+    env:
+      # next build runs with NODE_ENV=production, where an unset/invalid
+      # NEXT_PUBLIC_DATA_BACKEND now fails closed by design (Phase 3A) —
+      # must be set explicitly.
+      NEXT_PUBLIC_DATA_BACKEND: demo
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -68,6 +82,7 @@ jobs:
   supabase:
     runs-on: ubuntu-latest
     env:
+      NEXT_PUBLIC_DATA_BACKEND: supabase
       SUPABASE_URL: http://127.0.0.1:54321
       NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1:54321
       # Supabase CLI's well-known local-dev demo keys (see tests/rls/helpers.ts
@@ -89,7 +104,14 @@ jobs:
         with:
           version: latest
       - run: supabase start
-      - name: Run RLS/isolation/constraint tests
+      - name: Check generated Supabase types for drift (Phase 3A)
+        run: |
+          npx supabase gen types typescript --local > /tmp/database.types.ts
+          if ! diff -u lib/supabase/database.types.ts /tmp/database.types.ts; then
+            echo "::error::lib/supabase/database.types.ts is out of date — a migration changed the schema without regenerating types. Run: supabase gen types typescript --local > lib/supabase/database.types.ts"
+            exit 1
+          fi
+      - name: Run RLS/isolation/constraint/repository tests
         run: |
           set +e
           npm run test:rls > rls-output.log 2>&1
@@ -104,6 +126,6 @@ jobs:
       - name: Bootstrap the e2e test admin (also exercises scripts/bootstrap-admin.ts for real)
         run: npm run bootstrap-admin -- --email "$E2E_TEST_USER_EMAIL" --name "E2E Test Admin" --password "$E2E_TEST_USER_PASSWORD"
       - run: npx playwright install --with-deps chromium
-      - run: npx playwright test e2e/auth.spec.ts
+      - run: npx playwright test e2e/auth.spec.ts e2e/add-client-supabase.spec.ts
       - run: supabase stop
         if: always()
