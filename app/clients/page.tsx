@@ -13,7 +13,7 @@ import type { InsuranceType } from "@/types";
 const PAGE_SIZE = 10;
 
 export default function ClientsPage() {
-  const { clients, setClients, clientsLoaded } = useClients();
+  const { clients, clientsLoaded, isError, error, createClient, archiveClient, restoreClient } = useClients();
 
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("");
@@ -21,8 +21,9 @@ export default function ClientsPage() {
   const [sortKey, setSortKey] = useState<ClientSortKey>("newest");
   const [showArchived, setShowArchived] = useState(false);
   const [page, setPage] = useState(1);
-  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showAddClient, setShowAddClient] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const archivedCount = useMemo(() => clients.filter((client) => client.archivedAt).length, [clients]);
@@ -58,7 +59,7 @@ export default function ClientsPage() {
       if (sortKey === "status") {
         return a.status.localeCompare(b.status);
       }
-      return b.id - a.id;
+      return (b.createdAt ?? "").localeCompare(a.createdAt ?? "");
     });
 
     return result;
@@ -75,15 +76,11 @@ export default function ClientsPage() {
     setPage(1);
   }
 
-  // Archive only — no permanent-delete path exists in Phase 1. Archiving never
-  // touches a client's policies, quotes, tasks, notes, or documents; it only
-  // hides the client from the default view via `archivedAt`.
-  function archiveClient(id: number) {
-    setClients((current) =>
-      current.map((client) =>
-        client.id === id ? { ...client, archivedAt: new Date().toISOString() } : client
-      )
-    );
+  // Archive only — no permanent-delete path exists in this phase. Archiving
+  // never touches a client's policies, quotes, tasks, notes, or documents;
+  // it only hides the client from the default view via `archivedAt`.
+  async function archiveOne(id: string) {
+    await archiveClient(id);
     setSelectedIds((current) => {
       const next = new Set(current);
       next.delete(id);
@@ -91,10 +88,8 @@ export default function ClientsPage() {
     });
   }
 
-  function restoreClient(id: number) {
-    setClients((current) =>
-      current.map((client) => (client.id === id ? { ...client, archivedAt: undefined } : client))
-    );
+  async function restoreOne(id: string) {
+    await restoreClient(id);
     setSelectedIds((current) => {
       const next = new Set(current);
       next.delete(id);
@@ -102,25 +97,17 @@ export default function ClientsPage() {
     });
   }
 
-  function archiveSelected() {
-    setClients((current) =>
-      current.map((client) =>
-        selectedIds.has(client.id) ? { ...client, archivedAt: new Date().toISOString() } : client
-      )
-    );
+  async function archiveSelected() {
+    await Promise.all(Array.from(selectedIds).map((id) => archiveClient(id)));
     setSelectedIds(new Set());
   }
 
-  function restoreSelected() {
-    setClients((current) =>
-      current.map((client) =>
-        selectedIds.has(client.id) ? { ...client, archivedAt: undefined } : client
-      )
-    );
+  async function restoreSelected() {
+    await Promise.all(Array.from(selectedIds).map((id) => restoreClient(id)));
     setSelectedIds(new Set());
   }
 
-  function toggleSelect(id: number) {
+  function toggleSelect(id: string) {
     setSelectedIds((current) => {
       const next = new Set(current);
       if (next.has(id)) next.delete(id);
@@ -158,15 +145,19 @@ export default function ClientsPage() {
     const file = event.target.files?.[0];
     if (!file) return;
 
+    setImportError(null);
     const reader = new FileReader();
-    reader.onload = () => {
+    reader.onload = async () => {
       const text = String(reader.result ?? "");
       const imported = parseClientsCsv(text);
 
-      setClients((current) => [
-        ...imported.map((client, index) => ({ ...client, id: Date.now() + index })),
-        ...current,
-      ]);
+      for (const client of imported) {
+        const result = await createClient(client);
+        if (!result.ok) {
+          setImportError(`Import stopped: ${result.error.message}`);
+          return;
+        }
+      }
     };
     reader.readAsText(file);
     event.target.value = "";
@@ -200,6 +191,12 @@ export default function ClientsPage() {
           <Button onClick={() => setShowAddClient(true)}>+ New Client</Button>
         </div>
       </div>
+
+      {importError && (
+        <div className="mt-4 rounded-xl border border-red-500/40 bg-red-500/10 px-5 py-3 text-sm font-semibold text-red-300">
+          {importError}
+        </div>
+      )}
 
       <div className="mt-10 rounded-2xl border border-yellow-500/20 bg-black/70 p-6 backdrop-blur-sm">
         <ClientFilters
@@ -275,7 +272,11 @@ export default function ClientsPage() {
       )}
 
       <div className="mt-6">
-        {!clientsLoaded ? (
+        {isError ? (
+          <div className="rounded-2xl border border-red-500/40 bg-red-500/10 px-6 py-16 text-center text-red-300">
+            Could not load clients{error ? `: ${error.message}` : "."}
+          </div>
+        ) : !clientsLoaded ? (
           <div className="rounded-2xl border border-yellow-500/20 bg-black/75 px-6 py-16 text-center text-gray-500">
             Loading clients...
           </div>
@@ -285,8 +286,8 @@ export default function ClientsPage() {
             selectedIds={selectedIds}
             onToggleSelect={toggleSelect}
             onToggleSelectAll={toggleSelectAllOnPage}
-            onArchive={archiveClient}
-            onRestore={restoreClient}
+            onArchive={archiveOne}
+            onRestore={restoreOne}
             page={currentPage}
             totalPages={totalPages}
             onPageChange={setPage}
@@ -294,11 +295,7 @@ export default function ClientsPage() {
         )}
       </div>
 
-      <AddClientModal
-        open={showAddClient}
-        onClose={() => setShowAddClient(false)}
-        onAdd={(client) => setClients((current) => [client, ...current])}
-      />
+      <AddClientModal open={showAddClient} onClose={() => setShowAddClient(false)} onAdd={createClient} />
     </div>
   );
 }

@@ -67,7 +67,20 @@ export default function SettingsPage() {
   const [loaded, setLoaded] = useState(false);
   const [activeTab, setActiveTab] = useState<Tab>("Agency Information");
   const [savedMessage, setSavedMessage] = useState(false);
-  const { loadDemoData, clearDemoData, hasDemoData, counts } = useDemoData();
+  const [demoPending, setDemoPending] = useState(false);
+  const { loadDemoData, clearDemoData, hasDemoData, canManageDemoData, counts } = useDemoData();
+
+  async function handleLoadDemoData() {
+    setDemoPending(true);
+    await loadDemoData();
+    setDemoPending(false);
+  }
+
+  async function handleClearDemoData() {
+    setDemoPending(true);
+    await clearDemoData();
+    setDemoPending(false);
+  }
 
   useEffect(() => {
     // localStorage read must happen post-mount (SSR has no access to it).
@@ -322,15 +335,21 @@ export default function SettingsPage() {
               <p className="mt-5 text-sm text-gray-500">No demo data is currently loaded.</p>
             )}
 
+            {!canManageDemoData && (
+              <p className="mt-5 rounded-xl border border-yellow-500/30 bg-yellow-500/5 px-4 py-3 text-sm text-yellow-300">
+                Demo data management requires an admin account in Supabase mode.
+              </p>
+            )}
+
             <div className="mt-5 flex flex-wrap gap-3">
-              <Button type="button" onClick={loadDemoData}>
+              <Button type="button" onClick={handleLoadDemoData} disabled={!canManageDemoData || demoPending}>
                 {hasDemoData ? "Reload Demo Data" : "Load Demo Data"}
               </Button>
               <Button
                 type="button"
                 variant="danger"
-                onClick={clearDemoData}
-                disabled={!hasDemoData}
+                onClick={handleClearDemoData}
+                disabled={!canManageDemoData || demoPending || !hasDemoData}
               >
                 Clear Demo Data
               </Button>

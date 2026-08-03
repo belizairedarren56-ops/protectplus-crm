@@ -25,7 +25,7 @@ type PolicyModalProps = {
 };
 
 export function PolicyModal({ open, onClose, onSave, policy }: PolicyModalProps) {
-  const { clients } = useClients();
+  const { clients, isError: clientsErrored } = useClients();
 
   const selectableClients = useMemo(() => {
     const pool = policy
@@ -55,7 +55,7 @@ export function PolicyModal({ open, onClose, onSave, policy }: PolicyModalProps)
 
     const firstClient = selectableClients[0];
     return {
-      clientId: firstClient?.id ?? 0,
+      clientId: firstClient?.id ?? "",
       clientName: firstClient ? `${firstClient.firstName} ${firstClient.lastName}` : "",
       carrier: CARRIERS[0],
       policyNumber: "",
@@ -71,9 +71,9 @@ export function PolicyModal({ open, onClose, onSave, policy }: PolicyModalProps)
   // See QuoteModal.tsx for why this is derived rather than trusted from
   // `formData.clientId` directly — this modal's own `useClients()` instance
   // hasn't necessarily loaded yet at the first render after mount.
-  const effectiveClientId = formData.clientId || selectableClients[0]?.id || 0;
+  const effectiveClientId = formData.clientId || selectableClients[0]?.id || "";
 
-  function handleClientChange(clientId: number) {
+  function handleClientChange(clientId: string) {
     const client = selectableClients.find((item) => item.id === clientId);
     setFormData({
       ...formData,
@@ -101,7 +101,9 @@ export function PolicyModal({ open, onClose, onSave, policy }: PolicyModalProps)
   }
 
   // Policies always require a real client linkage now — nothing valid to
-  // submit until at least one client exists.
+  // submit until at least one client exists. A picker isn't the right place
+  // for a blocking error screen, so a clients-load failure degrades to the
+  // same empty state with a distinct message, rather than crashing.
   if (selectableClients.length === 0) {
     return (
       <Modal
@@ -112,8 +114,12 @@ export function PolicyModal({ open, onClose, onSave, policy }: PolicyModalProps)
       >
         <EmptyState
           icon="👤"
-          title="No clients yet"
-          description="Add a client first — every policy has to be linked to one."
+          title={clientsErrored ? "Clients unavailable" : "No clients yet"}
+          description={
+            clientsErrored
+              ? "Could not load clients — check your connection and try again."
+              : "Add a client first — every policy has to be linked to one."
+          }
         />
         <div className="flex justify-end pt-4">
           <Button type="button" variant="secondary" onClick={onClose}>
@@ -138,7 +144,7 @@ export function PolicyModal({ open, onClose, onSave, policy }: PolicyModalProps)
             <select
               required
               value={effectiveClientId}
-              onChange={(event) => handleClientChange(Number(event.target.value))}
+              onChange={(event) => handleClientChange(event.target.value)}
               className={FIELD_CLASSES}
             >
               {selectableClients.map((client) => (

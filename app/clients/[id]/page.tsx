@@ -35,10 +35,10 @@ type Tab = (typeof TABS)[number];
 
 export default function ClientProfilePage() {
   const params = useParams();
-  const clientId = Number(params.id);
+  const clientId = String(params.id);
   const [activeTab, setActiveTab] = useState<Tab>("Overview");
 
-  const { clients, setClients, clientsLoaded } = useClients();
+  const { clients, clientsLoaded, isError, error, restoreClient } = useClients();
   const { policies } = usePolicies();
   const { quotes } = useQuotes();
   const { tasks } = useTasks();
@@ -49,6 +49,14 @@ export default function ClientProfilePage() {
   const clientQuotes = quotes.filter((quote) => quote.clientId === clientId);
   const clientTasks = tasks.filter((task) => task.clientId === clientId);
   const clientDocuments = documents.filter((document) => document.clientId === clientId);
+
+  if (isError) {
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center">
+        <p className="text-red-400">Could not load this client{error ? `: ${error.message}` : "."}</p>
+      </div>
+    );
+  }
 
   if (!clientsLoaded) {
     return (
@@ -102,17 +110,7 @@ export default function ClientProfilePage() {
           <p className="text-sm font-bold text-gray-400">
             This client is archived and hidden from the default Clients list.
           </p>
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() =>
-              setClients((current) =>
-                current.map((item) =>
-                  item.id === client.id ? { ...item, archivedAt: undefined } : item
-                )
-              )
-            }
-          >
+          <Button variant="secondary" size="sm" onClick={() => restoreClient(client.id)}>
             Restore
           </Button>
         </div>

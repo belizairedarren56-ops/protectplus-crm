@@ -37,7 +37,7 @@ function isThisMonth(iso: string): boolean {
 export default function DashboardPage() {
   const [showAddClient, setShowAddClient] = useState(false);
 
-  const { clients, setClients, clientsLoaded } = useClients();
+  const { clients, clientsLoaded, createClient } = useClients();
   const { leads } = useLeads();
   const { quotes } = useQuotes();
   const { policies } = usePolicies();
@@ -121,11 +121,7 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      <AddClientModal
-        open={showAddClient}
-        onClose={() => setShowAddClient(false)}
-        onAdd={(client) => setClients((current) => [client, ...current])}
-      />
+      <AddClientModal open={showAddClient} onClose={() => setShowAddClient(false)} onAdd={createClient} />
     </div>
   );
 }
