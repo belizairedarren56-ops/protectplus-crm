@@ -45,13 +45,23 @@ test.describe("clients — supabase mode", () => {
     const clientName = `Supabase ${uniqueLastName}`;
     await expect(page.getByText(clientName)).toBeVisible();
 
-    // Temporary diagnostic (Phase 3A round 2): round 1 showed an entirely
-    // empty <body> after reload (no error banner, no loading text) — buffer
-    // console/page errors and the post-reload URL to see whether this is a
-    // redirect (e.g. back to /login), a crashed render, or a timing race.
-    const consoleLogs: string[] = [];
-    page.on("console", (msg) => consoleLogs.push(`[console:${msg.type()}] ${msg.text()}`));
-    page.on("pageerror", (err) => consoleLogs.push(`[pageerror] ${err.message}`));
+    // Temporary diagnostic (Phase 3A round 3): round 2 showed a 400 network
+    // error and a URL that stayed on /clients (not a redirect), but the
+    // console message alone didn't say which request failed. Capture the
+    // exact URL + response body of every failing (>=400) response.
+    const failedResponses: string[] = [];
+    page.on("response", (response) => {
+      if (response.status() >= 400) {
+        response
+          .text()
+          .then((body) => {
+            failedResponses.push(`${response.status()} ${response.url()} :: ${body.slice(0, 800)}`);
+          })
+          .catch(() => {
+            failedResponses.push(`${response.status()} ${response.url()} :: <unreadable body>`);
+          });
+      }
+    });
 
     // Reload — proves the client was actually persisted server-side, not
     // just held in an optimistic client-only cache.
@@ -69,8 +79,9 @@ test.describe("clients — supabase mode", () => {
         .isVisible()
         .catch(() => false);
       const bodySnippet = (await page.locator("body").innerText().catch(() => "")).slice(0, 1500);
+      await page.waitForTimeout(500); // let any in-flight response.text() promises above settle
       throw new Error(
-        `Client not visible after reload. url=${urlAfterReload} errorText=${JSON.stringify(errorText)} loadingVisible=${loadingVisible} bodySnippet=${JSON.stringify(bodySnippet)} console=${JSON.stringify(consoleLogs.slice(0, 20))}`
+        `Client not visible after reload. url=${urlAfterReload} errorText=${JSON.stringify(errorText)} loadingVisible=${loadingVisible} bodySnippet=${JSON.stringify(bodySnippet)} failedResponses=${JSON.stringify(failedResponses)}`
       );
     }
     await expect(page.getByText(clientName)).toBeVisible();
