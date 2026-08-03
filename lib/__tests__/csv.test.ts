@@ -3,7 +3,7 @@ import { clientsToCsv, parseClientsCsv } from "@/lib/csv";
 import type { Client } from "@/types";
 
 const client: Client = {
-  id: 1,
+  id: "1",
   firstName: "Jane",
   lastName: "Cooper, Jr.",
   phone: "954-555-2222",

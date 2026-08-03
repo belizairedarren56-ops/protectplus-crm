@@ -1,12 +1,45 @@
 import { describe, expect, it } from "vitest";
-import { generateDemoData } from "@/lib/demoData";
+import { generateDemoClientDrafts, generateDemoDataForClients } from "@/lib/demoData";
+import type { Client } from "@/types";
 
-describe("generateDemoData", () => {
+function resolveClients(count = 50): Client[] {
+  const drafts = generateDemoClientDrafts(count);
+  return drafts.map((draft, index) => ({
+    id: String(1000 + index),
+    firstName: draft.firstName,
+    lastName: draft.lastName,
+    phone: draft.phone,
+    email: draft.email,
+    policyType: draft.policyType,
+    status: draft.status,
+    address: draft.address,
+    city: draft.city,
+    state: draft.state,
+    zip: draft.zip,
+    carrier: draft.carrier,
+    policyNumber: draft.policyNumber,
+    insuranceTypes: draft.insuranceTypes,
+    createdAt: draft.createdAt,
+    assignedProducerName: draft.assignedProducerName,
+    familyMembers: draft.familyMembers,
+    isDemo: true,
+  }));
+}
+
+describe("generateDemoClientDrafts", () => {
+  it("tags every generated draft isDemo: true and produces no ids", () => {
+    const drafts = generateDemoClientDrafts(50);
+    expect(drafts).toHaveLength(50);
+    expect(drafts.every((draft) => draft.isDemo === true)).toBe(true);
+    expect(drafts.every((draft) => !("id" in draft))).toBe(true);
+  });
+});
+
+describe("generateDemoDataForClients", () => {
   it("tags every generated record isDemo: true", () => {
-    const demo = generateDemoData(1);
+    const clients = resolveClients();
+    const demo = generateDemoDataForClients(1, clients);
 
-    expect(demo.clients.length).toBeGreaterThan(0);
-    expect(demo.clients.every((client) => client.isDemo === true)).toBe(true);
     expect(demo.policies.every((policy) => policy.isDemo === true)).toBe(true);
     expect(demo.leads.every((lead) => lead.isDemo === true)).toBe(true);
     expect(demo.quotes.every((quote) => quote.isDemo === true)).toBe(true);
@@ -16,18 +49,19 @@ describe("generateDemoData", () => {
   });
 
   it("generates the expected record counts", () => {
-    const demo = generateDemoData(1);
+    const clients = resolveClients();
+    const demo = generateDemoDataForClients(1, clients);
 
-    expect(demo.clients).toHaveLength(50);
     expect(demo.policies).toHaveLength(25);
     expect(demo.leads).toHaveLength(20);
     expect(demo.quotes).toHaveLength(15);
     expect(demo.tasks).toHaveLength(30);
   });
 
-  it("every generated quote and policy references a real generated client", () => {
-    const demo = generateDemoData(1);
-    const clientIds = new Set(demo.clients.map((client) => client.id));
+  it("every generated quote and policy references a real, resolved client", () => {
+    const clients = resolveClients();
+    const demo = generateDemoDataForClients(1, clients);
+    const clientIds = new Set(clients.map((client) => client.id));
 
     for (const quote of demo.quotes) {
       expect(clientIds.has(quote.clientId)).toBe(true);
@@ -37,10 +71,10 @@ describe("generateDemoData", () => {
     }
   });
 
-  it("produces unique ids across every entity in a single generation", () => {
-    const demo = generateDemoData(1);
+  it("produces unique ids across every generated entity", () => {
+    const clients = resolveClients();
+    const demo = generateDemoDataForClients(1, clients);
     const allIds = [
-      ...demo.clients.map((c) => c.id),
       ...demo.policies.map((p) => p.id),
       ...demo.leads.map((l) => l.id),
       ...demo.quotes.map((q) => q.id),
@@ -50,5 +84,15 @@ describe("generateDemoData", () => {
     ];
 
     expect(new Set(allIds).size).toBe(allIds.length);
+  });
+
+  it("returns empty arrays when no clients are resolved yet", () => {
+    const demo = generateDemoDataForClients(1, []);
+    expect(demo.policies).toHaveLength(0);
+    expect(demo.leads).toHaveLength(0);
+    expect(demo.quotes).toHaveLength(0);
+    expect(demo.tasks).toHaveLength(0);
+    expect(demo.documents).toHaveLength(0);
+    expect(demo.notifications).toHaveLength(0);
   });
 });

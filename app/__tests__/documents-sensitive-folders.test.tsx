@@ -1,6 +1,8 @@
-import { render, screen } from "@testing-library/react";
+import { screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import DocumentsPage from "@/app/documents/page";
+import { renderWithProviders as render } from "@/test-utils/renderWithProviders";
+import { __resetMigrationStateForTests } from "@/lib/localDataMigrations";
 import { STORAGE_KEYS } from "@/lib/storage";
 import type { Document } from "@/types";
 
@@ -32,6 +34,8 @@ const documents: Document[] = [
 
 describe("Documents page — sensitive folder flag", () => {
   beforeEach(() => {
+    window.localStorage.clear();
+    __resetMigrationStateForTests();
     window.localStorage.setItem(STORAGE_KEYS.documents, JSON.stringify(documents));
   });
 
