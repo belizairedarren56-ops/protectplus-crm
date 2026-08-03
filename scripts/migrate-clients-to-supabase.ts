@@ -175,7 +175,7 @@ async function main() {
       zip: record.zip ?? null,
       carrier: record.carrier ?? null,
       policy_number: record.policyNumber ?? null,
-      insurance_types: record.insuranceTypes ?? (record.policyType ? [record.policyType] : []),
+      insurance_types: (record.insuranceTypes ?? (record.policyType ? [record.policyType] : [])) as Database["public"]["Tables"]["clients"]["Row"]["insurance_types"],
       assigned_producer_id: assignedProducerId,
       is_demo: false,
     });

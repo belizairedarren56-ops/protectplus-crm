@@ -112,12 +112,8 @@ jobs:
           code=$?
           set -e
           if [ $code -ne 0 ]; then
-            echo "::error::lib/supabase/database.types.ts is out of date — see the chunked dump below (temporary diagnostic)."
-            split -b 6000 -d /tmp/database.types.ts /tmp/types-chunk-
-            for f in /tmp/types-chunk-*; do
-              chunk=$(cat "$f" | sed ':a;N;$!ba;s/\n/%0A/g' | sed 's/\r//g')
-              echo "::error::CHUNK $f:%0A$chunk"
-            done
+            msg=$(tail -c 4000 /tmp/types-diff.log | sed ':a;N;$!ba;s/\n/%0A/g' | sed 's/\r//g')
+            echo "::error::lib/supabase/database.types.ts is out of date — run 'supabase gen types typescript --local > lib/supabase/database.types.ts' and commit the result.%0A$msg"
             cat /tmp/types-diff.log
             exit 1
           fi
