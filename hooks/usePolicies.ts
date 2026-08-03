@@ -1,10 +1,11 @@
 "use client";
 
+import { useAccessScope } from "@/hooks/useAccessScope";
 import { useLocalStorageList } from "@/hooks/useLocalStorageList";
-import { STORAGE_KEYS } from "@/lib/storage";
 import type { Policy } from "@/types";
 
 export function usePolicies() {
-  const { items, setItems, loaded } = useLocalStorageList<Policy>(STORAGE_KEYS.policies);
+  const scope = useAccessScope();
+  const { items, setItems, loaded } = useLocalStorageList<Policy>("policies", scope);
   return { policies: items, setPolicies: setItems, policiesLoaded: loaded };
 }
