@@ -112,8 +112,12 @@ jobs:
           code=$?
           set -e
           if [ $code -ne 0 ]; then
-            msg=$(tail -c 8000 /tmp/types-diff.log | sed ':a;N;$!ba;s/\n/%0A/g' | sed 's/\r//g')
-            echo "::error::lib/supabase/database.types.ts is out of date. Diff (generated vs checked-in):%0A$msg"
+            echo "::error::lib/supabase/database.types.ts is out of date — see the chunked dump below (temporary diagnostic)."
+            split -b 6000 -d /tmp/database.types.ts /tmp/types-chunk-
+            for f in /tmp/types-chunk-*; do
+              chunk=$(cat "$f" | sed ':a;N;$!ba;s/\n/%0A/g' | sed 's/\r//g')
+              echo "::error::CHUNK $f:%0A$chunk"
+            done
             cat /tmp/types-diff.log
             exit 1
           fi
