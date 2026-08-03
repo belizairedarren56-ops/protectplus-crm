@@ -3,6 +3,7 @@ import { LEAD_STAGES, DOCUMENT_FOLDERS } from "@/types";
 import type {
   Client,
   Document,
+  FamilyMember,
   InsuranceType,
   Lead,
   Notification,
@@ -14,10 +15,18 @@ import type {
   Task,
 } from "@/types";
 
-// Pure generator functions only — nothing in this file touches localStorage or
-// any hook's state. `hooks/useDemoData.ts` is the only thing allowed to call
-// these and feed the results into the real entity hooks, so demo data flows
-// through the exact same React-state path as any other mutation.
+// Pure generator functions only — nothing in this file touches localStorage,
+// a repository, or any hook's state. `hooks/useDemoData.ts` is the only
+// thing allowed to call these and feed the results into the real entity
+// hooks/repositories, so demo data flows through the same path as any other
+// mutation.
+//
+// Split into two stages (client drafts, then everything else given the
+// RESOLVED clients): in `supabase` mode, client UUIDs aren't known until
+// Postgres assigns them via clientsRepository.createDemoBatch(), so the
+// other six entities' generators can't predict ids up front the way a
+// single combined pass could when everything lived in one localStorage
+// array.
 
 function mulberry32(seed: number) {
   let state = seed;
@@ -158,7 +167,33 @@ function premiumForType(rng: Rng, insuranceType: InsuranceType): number {
   return randomInt(rng, min, max);
 }
 
-function generateClient(rng: Rng, id: number): Client {
+// A generated client, not yet assigned an id — the caller (demo/localStorage
+// backend or the Supabase repository) is responsible for that, since only it
+// knows how ids are actually minted for the active backend.
+export type DemoClientDraft = {
+  firstName: string;
+  lastName: string;
+  phone: string;
+  email: string;
+  policyType: string;
+  status: string;
+  address: string;
+  city: string;
+  state: string;
+  zip: string;
+  carrier: string;
+  policyNumber: string;
+  insuranceTypes: InsuranceType[];
+  createdAt: string;
+  /** demo-mode display only — the Supabase repository ignores this. */
+  assignedProducerName: string;
+  /** demo-mode only — family_members isn't migrated this phase, so this is
+   * dropped entirely when generating for the `supabase` backend. */
+  familyMembers: FamilyMember[];
+  isDemo: true;
+};
+
+function generateClientDraft(rng: Rng): DemoClientDraft {
   const firstName = pick(rng, FIRST_NAMES);
   const lastName = pick(rng, LAST_NAMES);
   const location = pick(rng, CITIES);
@@ -166,7 +201,6 @@ function generateClient(rng: Rng, id: number): Client {
   const carrier = pick(rng, CARRIERS);
 
   return {
-    id,
     firstName,
     lastName,
     phone: randomPhone(rng),
@@ -181,17 +215,23 @@ function generateClient(rng: Rng, id: number): Client {
     policyNumber: randomPolicyNumber(rng, carrier),
     insuranceTypes,
     createdAt: isoDaysFromNow(-randomInt(rng, 5, 700)),
-    producer: pick(rng, PRODUCERS),
+    assignedProducerName: pick(rng, PRODUCERS),
     familyMembers:
       rng() > 0.5
         ? pickMany(rng, FIRST_NAMES, randomInt(rng, 1, 2)).map((name, index) => ({
-            id: `${id}-fam-${index}`,
+            id: `demo-fam-${index}-${name}`,
             name: `${name} ${lastName}`,
             relationship: pick(rng, ["Spouse", "Child", "Parent"]),
           }))
         : [],
     isDemo: true,
   };
+}
+
+/** Stage 1: generate client drafts only — no ids, no cross-references. */
+export function generateDemoClientDrafts(count = 50): DemoClientDraft[] {
+  const rng = mulberry32(20260730);
+  return Array.from({ length: count }, () => generateClientDraft(rng));
 }
 
 function policyStatusFor(rng: Rng, expirationIso: string): PolicyStatus {
@@ -206,7 +246,6 @@ function policyStatusFor(rng: Rng, expirationIso: string): PolicyStatus {
 }
 
 export type DemoDataSet = {
-  clients: Client[];
   policies: Policy[];
   leads: Lead[];
   quotes: Quote[];
@@ -216,20 +255,18 @@ export type DemoDataSet = {
 };
 
 /**
- * Generates a self-contained set of demo records, every one tagged
- * `isDemo: true`. Pure function — takes a starting numeric id and a seed,
- * returns data, writes nothing anywhere. Every record's `id` comes from
- * `startId` upward, so callers can keep ids unique against whatever's already
- * in each entity list.
+ * Stage 2: generate the six still-local entities against a RESOLVED clients
+ * array — real ids already assigned, whether by `demoClientsRepository`
+ * (`String(Date.now())`-based) or by Postgres (real UUIDs, after
+ * `clientsRepository.createDemoBatch()` returns). `startId` seeds these
+ * entities' own numeric ids (unaffected by the client id-format change).
  */
-export function generateDemoData(startId: number): DemoDataSet {
-  const rng = mulberry32(20260730);
+export function generateDemoDataForClients(startId: number, clients: Client[]): DemoDataSet {
+  const rng = mulberry32(20260731);
   let nextId = startId;
 
-  const clients: Client[] = [];
-  for (let i = 0; i < 50; i++) {
-    clients.push(generateClient(rng, nextId));
-    nextId += 1;
+  if (clients.length === 0) {
+    return { policies: [], leads: [], quotes: [], tasks: [], documents: [], notifications: [] };
   }
 
   const policies: Policy[] = Array.from({ length: 25 }, (_, index) => {
@@ -399,5 +436,5 @@ export function generateDemoData(startId: number): DemoDataSet {
     },
   ];
 
-  return { clients, policies, leads, quotes, tasks, documents, notifications };
+  return { policies, leads, quotes, tasks, documents, notifications };
 }
