@@ -30,15 +30,6 @@ test.describe("clients — supabase mode", () => {
   test("creating, listing, archiving, and restoring a client round-trips through Supabase", async ({
     page,
   }) => {
-    // A full reload here re-does the entire cold-start path (proxy.ts's
-    // middleware auth check, the browser Supabase client re-reading the
-    // session from cookies, the profile query, then the clients query) all
-    // against a freshly-started local Postgres/PostgREST stack — slower and
-    // more variable under a shared CI runner than the default 30s budget
-    // reliably covers. Widened once real CI runs showed both fast (~5s) and
-    // slow (~25s+) completions of the same, otherwise-passing flow.
-    test.setTimeout(60_000);
-
     const uniqueLastName = `E2E-${Date.now()}`;
 
     await page.goto("/clients");
@@ -54,32 +45,10 @@ test.describe("clients — supabase mode", () => {
     const clientName = `Supabase ${uniqueLastName}`;
     await expect(page.getByText(clientName)).toBeVisible();
 
-    // Temporary diagnostic (Phase 3A round 6): with a full 20s wait, the
-    // element genuinely never appears (3/3 attempts) — ruling out timing and
-    // pointing at a real, deterministic issue. Capture the exact
-    // /rest/v1/clients response after reload, whatever its status.
-    const clientsResponsePromise = page
-      .waitForResponse((r) => r.url().includes("/rest/v1/clients") && r.request().method() === "GET", {
-        timeout: 15_000,
-      })
-      .catch((err) => err);
-
     // Reload — proves the client was actually persisted server-side, not
     // just held in an optimistic client-only cache.
     await page.reload();
-    const clientsResponse = await clientsResponsePromise;
-    const clientsResponseInfo =
-      clientsResponse instanceof Error
-        ? `<no response captured: ${clientsResponse.message}>`
-        : `${clientsResponse.status()} ${clientsResponse.url()} :: ${(await clientsResponse.text().catch(() => "<unreadable>")).slice(0, 1000)}`;
-
-    const clientVisible = await page.getByText(clientName).isVisible({ timeout: 20_000 }).catch(() => false);
-    if (!clientVisible) {
-      const bodySnippet = (await page.locator("body").innerText().catch(() => "")).slice(0, 1000);
-      throw new Error(
-        `Client not visible after reload. clientsResponse=${clientsResponseInfo} bodySnippet=${JSON.stringify(bodySnippet)}`
-      );
-    }
+    await expect(page.getByText(clientName)).toBeVisible();
 
     // Archive.
     const row = page.getByText(clientName).locator("xpath=ancestor::tr");

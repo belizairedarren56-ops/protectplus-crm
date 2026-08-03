@@ -61,7 +61,18 @@ export function AccessScopeProvider({ backend, children }: { backend: DataBacken
       const nextUserId = session?.user.id ?? null;
       if (event === "SIGNED_OUT" || nextUserId !== lastScope.current.userId) {
         queryClient.clear();
-        lastScope.current = { userId: null, agencyId: null, role: null };
+        // Record nextUserId here, not null — resetting to null left a
+        // window (until the profile-resolution effect below eventually ran)
+        // where a second, redundant onAuthStateChange event for the SAME
+        // user (Supabase's browser client can fire more than one during
+        // initial session restoration, e.g. INITIAL_SESSION followed by a
+        // TOKEN_REFRESHED) looked like yet another identity change and
+        // cleared the cache again — repeatedly discarding an
+        // already-in-flight or already-resolved clients fetch. Real browser
+        // reproduction: the clients REST request came back 200 with the
+        // correct data, but the UI stayed on "Loading clients..." forever
+        // because the cache backing it kept getting wiped out from under it.
+        lastScope.current = { userId: nextUserId, agencyId: null, role: null };
       }
       setAuthUserId(nextUserId);
     });
@@ -92,11 +103,18 @@ export function AccessScopeProvider({ backend, children }: { backend: DataBacken
       role: profileQuery.data.role,
     };
     const prev = lastScope.current;
-    // Clear on ANY of userId/agencyId/role changing, not just sign-out —
-    // catches a role/agency change that wasn't preceded by a sign-out event.
-    // (Relative to whenever this query refetches — window refocus,
-    // reconnect, next mount — not a live push; that would need Realtime.)
-    if (prev.userId !== next.userId || prev.agencyId !== next.agencyId || prev.role !== next.role) {
+    // Clear when agencyId/role actually CHANGE from a previously known
+    // value — catches a role/agency change that wasn't preceded by a
+    // sign-out event. (Relative to whenever this query refetches — window
+    // refocus, reconnect, next mount — not a live push; that would need
+    // Realtime.) Deliberately does NOT clear on the first-ever resolution
+    // for a session (prev.agencyId/role still the initial null placeholder
+    // set by the listener above) — nothing could have been fetched yet
+    // under a role/agency that didn't exist, so there is nothing stale to
+    // protect against, and clearing here raced against the clients query
+    // that becomes enabled in this same render (see the listener comment).
+    const isFirstResolutionForThisUser = prev.agencyId === null && prev.role === null;
+    if (!isFirstResolutionForThisUser && (prev.agencyId !== next.agencyId || prev.role !== next.role)) {
       queryClient.clear();
     }
     lastScope.current = next;
