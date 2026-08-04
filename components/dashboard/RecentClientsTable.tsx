@@ -11,7 +11,7 @@ export function RecentClientsTable({ clients }: { clients: Client[] }) {
   const router = useRouter();
   const recent = clients
     .filter((client) => !client.archivedAt)
-    .sort((a, b) => b.id - a.id)
+    .sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""))
     .slice(0, 6);
 
   const columns: TableColumn<Client>[] = [

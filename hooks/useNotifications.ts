@@ -1,13 +1,12 @@
 "use client";
 
+import { useAccessScope } from "@/hooks/useAccessScope";
 import { useLocalStorageList } from "@/hooks/useLocalStorageList";
-import { STORAGE_KEYS } from "@/lib/storage";
 import type { Notification } from "@/types";
 
 export function useNotifications() {
-  const { items, setItems, loaded } = useLocalStorageList<Notification>(
-    STORAGE_KEYS.notifications
-  );
+  const scope = useAccessScope();
+  const { items, setItems, loaded } = useLocalStorageList<Notification>("notifications", scope);
   return {
     notifications: items,
     setNotifications: setItems,

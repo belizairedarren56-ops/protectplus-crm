@@ -1,12 +1,14 @@
-import { render, screen, within } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it } from "vitest";
 import ClientsPage from "@/app/clients/page";
+import { renderWithProviders } from "@/test-utils/renderWithProviders";
+import { __resetMigrationStateForTests } from "@/lib/localDataMigrations";
 import { STORAGE_KEYS, getItem } from "@/lib/storage";
 import type { Client, Policy, Task } from "@/types";
 
 const client: Client = {
-  id: 1,
+  id: "1",
   firstName: "Jane",
   lastName: "Cooper",
   phone: "954-555-2222",
@@ -17,7 +19,7 @@ const client: Client = {
 
 const dependentPolicy: Policy = {
   id: 100,
-  clientId: 1,
+  clientId: "1",
   clientName: "Jane Cooper",
   carrier: "State Farm",
   policyNumber: "SF-1000000",
@@ -36,7 +38,7 @@ const dependentTask: Task = {
   priority: "Medium",
   dueDate: new Date().toISOString(),
   status: "Open",
-  clientId: 1,
+  clientId: "1",
   clientName: "Jane Cooper",
 };
 
@@ -49,34 +51,37 @@ function seed() {
 describe("Clients page — archive/restore", () => {
   beforeEach(() => {
     window.localStorage.clear();
+    __resetMigrationStateForTests();
     seed();
   });
 
   it("archiving a client hides it from the Active view but never touches dependent records", async () => {
     const user = userEvent.setup();
-    render(<ClientsPage />);
+    renderWithProviders(<ClientsPage />);
 
     expect(await screen.findByText("Jane Cooper")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Archive" }));
 
-    expect(screen.queryByText("Jane Cooper")).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByText("Jane Cooper")).not.toBeInTheDocument());
 
     // No permanent-delete path exists — dependents must be untouched.
-    expect(getItem<Policy[]>(STORAGE_KEYS.policies, [])).toHaveLength(1);
-    expect(getItem<Task[]>(STORAGE_KEYS.tasks, [])).toHaveLength(1);
+    // Both entities are still routed through the versioned local-data key
+    // post-migration, not the untouched legacy key.
+    expect(getItem<Policy[]>(`${STORAGE_KEYS.policies}@v2`, [])).toHaveLength(1);
+    expect(getItem<Task[]>(`${STORAGE_KEYS.tasks}@v2`, [])).toHaveLength(1);
 
-    const archivedClients = getItem<Client[]>(STORAGE_KEYS.clients, []);
+    const archivedClients = getItem<Client[]>(`${STORAGE_KEYS.clients}@v2`, []);
     expect(archivedClients).toHaveLength(1);
     expect(archivedClients[0].archivedAt).toBeTruthy();
   });
 
   it("an archived client can be restored back to the Active view", async () => {
     const user = userEvent.setup();
-    render(<ClientsPage />);
+    renderWithProviders(<ClientsPage />);
 
     await user.click(await screen.findByRole("button", { name: "Archive" }));
-    expect(screen.queryByText("Jane Cooper")).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByText("Jane Cooper")).not.toBeInTheDocument());
 
     await user.click(screen.getByRole("button", { name: /Archived/ }));
     const archivedRow = await screen.findByText("Jane Cooper");
@@ -89,12 +94,12 @@ describe("Clients page — archive/restore", () => {
     await user.click(screen.getByRole("button", { name: "Active" }));
     expect(await screen.findByText("Jane Cooper")).toBeInTheDocument();
 
-    const restoredClients = getItem<Client[]>(STORAGE_KEYS.clients, []);
+    const restoredClients = getItem<Client[]>(`${STORAGE_KEYS.clients}@v2`, []);
     expect(restoredClients[0].archivedAt).toBeUndefined();
   });
 
   it("never renders a Delete action anywhere on the page", async () => {
-    render(<ClientsPage />);
+    renderWithProviders(<ClientsPage />);
     await screen.findByText("Jane Cooper");
 
     expect(screen.queryByRole("button", { name: /^Delete/ })).not.toBeInTheDocument();

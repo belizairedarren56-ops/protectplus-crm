@@ -10,11 +10,11 @@ import type { Client } from "@/types";
 
 type ClientTableProps = {
   clients: Client[];
-  selectedIds: Set<number>;
-  onToggleSelect: (id: number) => void;
+  selectedIds: Set<string>;
+  onToggleSelect: (id: string) => void;
   onToggleSelectAll: () => void;
-  onArchive: (id: number) => void;
-  onRestore: (id: number) => void;
+  onArchive: (id: string) => void;
+  onRestore: (id: string) => void;
   page: number;
   totalPages: number;
   onPageChange: (page: number) => void;

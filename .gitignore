@@ -45,3 +45,8 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Claude Code local settings — personal/machine-specific, never shared via
+# git (unlike .claude/settings.json, which is intentionally checked in for
+# the team; see AGENTS.md/CLAUDE.md).
+.claude/settings.local.json

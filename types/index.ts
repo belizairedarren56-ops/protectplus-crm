@@ -17,11 +17,12 @@ export type FamilyMember = {
   dateOfBirth?: string;
 };
 
-// The original app shape kept intact (id, firstName, lastName, phone, email,
-// policyType, status) so existing localStorage data keeps working. Everything
-// else is optional and backfilled by demo data / the newer UI.
+// `id` is a string in both backends (Phase 3A): a real Supabase UUID in
+// `supabase` mode, `String(Date.now())` in `demo` mode — one type regardless
+// of active backend, so every clientId cross-reference below can also be a
+// plain string instead of a `string | number` union.
 export type Client = {
-  id: number;
+  id: string;
   firstName: string;
   lastName: string;
   phone: string;
@@ -37,13 +38,22 @@ export type Client = {
   insuranceTypes?: InsuranceType[];
   createdAt?: string;
   familyMembers?: FamilyMember[];
-  /** Free-text producer name for now (Phase 1 has no real user identity). */
-  producer?: string;
+  /** Real `profiles.id`, `supabase` mode only — the actual RLS-enforced
+   * ownership column. Absent in `demo` mode (no real profiles exist). */
+  assignedProducerId?: string;
+  /** Denormalized display name, populated in both modes — joined from
+   * `profiles.full_name` in `supabase` mode, picked from `PRODUCERS`
+   * directly in `demo` mode. Every read-only consumer (tables, CSV export,
+   * the Overview tab) uses this field regardless of backend. */
+  assignedProducerName?: string;
+  /** `supabase` mode only — the agency this record belongs to. */
+  agencyId?: string;
   /** Set when archived via the Clients page; archived clients are hidden from
    * the default view but never cascade-deleted. Absent/undefined = active. */
   archivedAt?: string;
-  /** True only for records created by `loadDemoData()`, so "Clear Demo Data"
-   * can remove exactly those and never a real, user-entered record. */
+  /** True only for records created by `loadDemoData()` (`demo` mode) or
+   * `createDemoBatch()` (`supabase` mode), so "Clear Demo Data" can remove
+   * exactly those and never a real, user-entered record. */
   isDemo?: boolean;
 };
 
@@ -70,7 +80,8 @@ export const LEAD_STAGES: LeadStage[] = [
 
 export type Lead = {
   id: number;
-  clientId?: number;
+  /** References Client.id — a string in both backends since Phase 3A. */
+  clientId?: string;
   clientName: string;
   insuranceType: InsuranceType;
   stage: LeadStage;
@@ -86,7 +97,8 @@ export type QuoteStatus = "Draft" | "Sent" | "Accepted" | "Declined" | "Expired"
 
 export type Quote = {
   id: number;
-  clientId: number;
+  /** References Client.id — a string in both backends since Phase 3A. */
+  clientId: string;
   clientName: string;
   carrier: string;
   premium: number;
@@ -102,7 +114,8 @@ export type PolicyStatus = "Active" | "Renewal Due" | "Cancelled" | "Expired";
 
 export type Policy = {
   id: number;
-  clientId: number;
+  /** References Client.id — a string in both backends since Phase 3A. */
+  clientId: string;
   clientName: string;
   carrier: string;
   policyNumber: string;
@@ -125,7 +138,8 @@ export type Task = {
   priority: Priority;
   dueDate: string;
   status: TaskStatus;
-  clientId?: number;
+  /** References Client.id — a string in both backends since Phase 3A. */
+  clientId?: string;
   clientName?: string;
   isDemo?: boolean;
 };
@@ -153,7 +167,8 @@ export type Document = {
   id: number;
   name: string;
   folder: DocumentFolder;
-  clientId?: number;
+  /** References Client.id — a string in both backends since Phase 3A. */
+  clientId?: string;
   clientName?: string;
   uploadedAt: string;
   fileType: string;

@@ -1,10 +1,11 @@
 "use client";
 
+import { useAccessScope } from "@/hooks/useAccessScope";
 import { useLocalStorageList } from "@/hooks/useLocalStorageList";
-import { STORAGE_KEYS } from "@/lib/storage";
 import type { Task } from "@/types";
 
 export function useTasks() {
-  const { items, setItems, loaded } = useLocalStorageList<Task>(STORAGE_KEYS.tasks);
+  const scope = useAccessScope();
+  const { items, setItems, loaded } = useLocalStorageList<Task>("tasks", scope);
   return { tasks: items, setTasks: setItems, tasksLoaded: loaded };
 }

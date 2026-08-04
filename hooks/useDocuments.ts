@@ -1,10 +1,11 @@
 "use client";
 
+import { useAccessScope } from "@/hooks/useAccessScope";
 import { useLocalStorageList } from "@/hooks/useLocalStorageList";
-import { STORAGE_KEYS } from "@/lib/storage";
 import type { Document } from "@/types";
 
 export function useDocuments() {
-  const { items, setItems, loaded } = useLocalStorageList<Document>(STORAGE_KEYS.documents);
+  const scope = useAccessScope();
+  const { items, setItems, loaded } = useLocalStorageList<Document>("documents", scope);
   return { documents: items, setDocuments: setItems, documentsLoaded: loaded };
 }
