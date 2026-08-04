@@ -9,8 +9,10 @@ import { useNotifications } from "@/hooks/useNotifications";
 import { usePolicies } from "@/hooks/usePolicies";
 import { useQuotes } from "@/hooks/useQuotes";
 import { useTasks } from "@/hooks/useTasks";
+import type { DataBackendError } from "@/lib/dataMode";
 import { generateDemoClientDrafts, generateDemoDataForClients } from "@/lib/demoData";
 import type { NewClientInput } from "@/lib/repositories/clientsRepository";
+import type { Result } from "@/lib/result";
 
 /**
  * The only place demo data is ever written. `demo` mode: unchanged in
@@ -34,20 +36,31 @@ export function useDemoData() {
 
   const isAdmin = scope.status === "ready" && (scope.backend === "demo" || scope.role === "admin");
 
-  const clearDemoData = useCallback(async () => {
-    await clearDemoClients();
+  // Aborts before touching any of the six still-local entities if the
+  // Supabase client-clear operation itself fails — a partial clear (real
+  // clients' demo tag stays intact but leads/quotes/etc. already got wiped)
+  // would be a worse, more confusing state than doing nothing at all.
+  const clearDemoData = useCallback(async (): Promise<Result<void, DataBackendError>> => {
+    const cleared = await clearDemoClients();
+    if (!cleared.ok) return cleared;
+
     setLeads((current) => current.filter((lead) => !lead.isDemo));
     setQuotes((current) => current.filter((quote) => !quote.isDemo));
     setPolicies((current) => current.filter((policy) => !policy.isDemo));
     setTasks((current) => current.filter((task) => !task.isDemo));
     setDocuments((current) => current.filter((document) => !document.isDemo));
     setNotifications((current) => current.filter((notification) => !notification.isDemo));
+    return { ok: true, data: undefined };
   }, [clearDemoClients, setLeads, setQuotes, setPolicies, setTasks, setDocuments, setNotifications]);
 
-  const loadDemoData = useCallback(async () => {
+  const loadDemoData = useCallback(async (): Promise<Result<void, DataBackendError>> => {
     // Clear any previously-loaded demo set first so repeated clicks replace
-    // rather than accumulate; real records are untouched either way.
-    await clearDemoData();
+    // rather than accumulate; real records are untouched either way. Abort
+    // the whole load if that initial clear fails — generating a second demo
+    // set on top of a clear that only partially succeeded (or didn't run at
+    // all) would compound the confusion rather than surface it.
+    const clearResult = await clearDemoData();
+    if (!clearResult.ok) return clearResult;
 
     const drafts = generateDemoClientDrafts(50);
     const inputs: NewClientInput[] = drafts.map((draft) => ({
@@ -70,7 +83,7 @@ export function useDemoData() {
     }));
 
     const created = await loadDemoClients(inputs);
-    if (!created.ok) return;
+    if (!created.ok) return created;
 
     const demo = generateDemoDataForClients(Date.now(), created.data);
 
@@ -80,6 +93,7 @@ export function useDemoData() {
     setTasks((current) => [...demo.tasks, ...current]);
     setDocuments((current) => [...demo.documents, ...current]);
     setNotifications((current) => [...demo.notifications, ...current]);
+    return { ok: true, data: undefined };
   }, [clearDemoData, loadDemoClients, setLeads, setQuotes, setPolicies, setTasks, setDocuments, setNotifications]);
 
   const demoClientCount = clients.filter((client) => client.isDemo).length;

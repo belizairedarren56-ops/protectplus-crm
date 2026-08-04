@@ -51,7 +51,13 @@ type LegacyClient = {
   carrier?: string;
   policyNumber?: string;
   insuranceTypes?: string[];
+  /** Pre-Phase-3A shape. */
   producer?: string;
+  /** Phase-3A-and-later shape (see lib/localDataMigrations.ts's transform,
+   * which renames producer -> assignedProducerName during the id-format
+   * migration) — a client created after that migration ran will only ever
+   * have this field, never `producer`. */
+  assignedProducerName?: string;
 };
 
 function arg(name: string): string | undefined {
@@ -148,11 +154,17 @@ async function main() {
     }
 
     let assignedProducerId: string | undefined;
-    if (record.producer) {
-      const mapped = mapProducerNameToProfileId(record.producer, profiles);
+    // assignedProducerName takes precedence — it's the field a client
+    // created after the Phase 3A id-format migration ran will actually
+    // have; `producer` only ever appears on unmigrated, pre-Phase-3A
+    // records. Both are the same free-text producer display name, just
+    // under the two field names this app has used across that migration.
+    const producerName = record.assignedProducerName ?? record.producer;
+    if (producerName) {
+      const mapped = mapProducerNameToProfileId(producerName, profiles);
       if (!mapped.ok) {
         failures.push(
-          `Record ${index} (${record.firstName} ${record.lastName}): producer "${record.producer}" ${
+          `Record ${index} (${record.firstName} ${record.lastName}): producer "${producerName}" ${
             mapped.reason === "ambiguous" ? "matches more than one profile" : "was not found"
           }.`
         );

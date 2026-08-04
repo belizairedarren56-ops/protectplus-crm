@@ -68,17 +68,22 @@ export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState<Tab>("Agency Information");
   const [savedMessage, setSavedMessage] = useState(false);
   const [demoPending, setDemoPending] = useState(false);
+  const [demoError, setDemoError] = useState<string | null>(null);
   const { loadDemoData, clearDemoData, hasDemoData, canManageDemoData, counts } = useDemoData();
 
   async function handleLoadDemoData() {
     setDemoPending(true);
-    await loadDemoData();
+    setDemoError(null);
+    const result = await loadDemoData();
+    if (!result.ok) setDemoError(result.error.message);
     setDemoPending(false);
   }
 
   async function handleClearDemoData() {
     setDemoPending(true);
-    await clearDemoData();
+    setDemoError(null);
+    const result = await clearDemoData();
+    if (!result.ok) setDemoError(result.error.message);
     setDemoPending(false);
   }
 
@@ -338,6 +343,15 @@ export default function SettingsPage() {
             {!canManageDemoData && (
               <p className="mt-5 rounded-xl border border-yellow-500/30 bg-yellow-500/5 px-4 py-3 text-sm text-yellow-300">
                 Demo data management requires an admin account in Supabase mode.
+              </p>
+            )}
+
+            {demoError && (
+              <p
+                role="alert"
+                className="mt-5 rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm font-semibold text-red-300"
+              >
+                {demoError}
               </p>
             )}
 

@@ -216,3 +216,105 @@ describe("is_demo insert restriction — non-admin cannot create a demo row", ()
     expect(error).toBeNull();
   });
 });
+
+describe("is_demo UPDATE restriction — non-admin cannot change classification either direction", () => {
+  it("rejects a producer flipping their own ordinary client's is_demo to true", async () => {
+    const repoA = createClientsRepository(producerA.client, agencyId);
+    const created = await repoA.create({
+      firstName: "Ordinary",
+      lastName: "ClientA",
+      phone: "",
+      email: "",
+      policyType: "Auto",
+      status: "New Lead",
+      isDemo: false,
+    });
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    const result = await repoA.update(created.data.id, { isDemo: true });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.kind).toBe("denied");
+
+    // The row itself is untouched by the rejected attempt.
+    const stillOrdinary = await repoA.get(created.data.id);
+    expect(stillOrdinary.ok).toBe(true);
+    if (stillOrdinary.ok) expect(stillOrdinary.data?.isDemo).toBe(false);
+  });
+
+  it("rejects a producer flipping their own demo client's is_demo to false", async () => {
+    const repoAdmin = createClientsRepository(adminUser.client, agencyId);
+    const repoA = createClientsRepository(producerA.client, agencyId);
+
+    const batch = await repoAdmin.createDemoBatch([
+      {
+        firstName: "Demo",
+        lastName: "OwnedByA",
+        phone: "",
+        email: "",
+        policyType: "Auto",
+        status: "New Lead",
+        assignedProducerId: producerA.userId,
+      },
+    ]);
+    expect(batch.ok).toBe(true);
+    if (!batch.ok) return;
+    const demoClientId = batch.data[0].id;
+
+    const result = await repoA.update(demoClientId, { isDemo: false });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.kind).toBe("denied");
+
+    const stillDemo = await repoAdmin.get(demoClientId);
+    expect(stillDemo.ok).toBe(true);
+    if (stillDemo.ok) expect(stillDemo.data?.isDemo).toBe(true);
+
+    // Cleanup so this fixture doesn't linger for other tests in this file.
+    await repoAdmin.clearAgencyDemoClients();
+  });
+
+  it("still allows a producer to update ordinary fields on their own client without touching is_demo", async () => {
+    const repoA = createClientsRepository(producerA.client, agencyId);
+    const created = await repoA.create({
+      firstName: "Editable",
+      lastName: "ClientA",
+      phone: "",
+      email: "",
+      policyType: "Auto",
+      status: "New Lead",
+      isDemo: false,
+    });
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    const result = await repoA.update(created.data.id, { status: "Active" });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.data.status).toBe("Active");
+      expect(result.data.isDemo).toBe(false);
+    }
+  });
+
+  it("allows an admin to change is_demo in both directions", async () => {
+    const repoAdmin = createClientsRepository(adminUser.client, agencyId);
+    const created = await repoAdmin.create({
+      firstName: "Admin",
+      lastName: "Controlled",
+      phone: "",
+      email: "",
+      policyType: "Auto",
+      status: "New Lead",
+      isDemo: false,
+    });
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+
+    const toDemo = await repoAdmin.update(created.data.id, { isDemo: true });
+    expect(toDemo.ok).toBe(true);
+    if (toDemo.ok) expect(toDemo.data.isDemo).toBe(true);
+
+    const backToOrdinary = await repoAdmin.update(created.data.id, { isDemo: false });
+    expect(backToOrdinary.ok).toBe(true);
+    if (backToOrdinary.ok) expect(backToOrdinary.data.isDemo).toBe(false);
+  });
+});

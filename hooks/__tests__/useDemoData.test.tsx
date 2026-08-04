@@ -1,5 +1,5 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useDemoData } from "@/hooks/useDemoData";
 import { createTestQueryClient, DEMO_SCOPE } from "@/test-utils/renderWithProviders";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -99,5 +99,71 @@ describe("useDemoData", () => {
   it("Demo Data controls are always available in demo mode", () => {
     const { result } = renderHook(() => useDemoData(), { wrapper });
     expect(result.current.canManageDemoData).toBe(true);
+  });
+
+  it("clearDemoData returns a typed error and leaves other local entities untouched when the clients clear fails", async () => {
+    const { result } = renderHook(() => useDemoData(), { wrapper });
+    await waitFor(() => expect(result.current.hasDemoData).toBe(false));
+
+    await act(async () => {
+      await result.current.loadDemoData();
+    });
+    await waitFor(() => expect(result.current.hasDemoData).toBe(true));
+    const leadsCountBefore = result.current.counts.leads;
+    expect(leadsCountBefore).toBeGreaterThan(0);
+
+    const originalSetItem = Storage.prototype.setItem;
+    const setItemSpy = vi.spyOn(Storage.prototype, "setItem").mockImplementation(function (
+      this: Storage,
+      key: string,
+      value: string
+    ) {
+      if (key === `${STORAGE_KEYS.clients}@v2`) throw new Error("simulated storage failure");
+      return originalSetItem.call(this, key, value);
+    });
+
+    let clearResult: Awaited<ReturnType<typeof result.current.clearDemoData>> | undefined;
+    await act(async () => {
+      clearResult = await result.current.clearDemoData();
+    });
+    setItemSpy.mockRestore();
+
+    expect(clearResult?.ok).toBe(false);
+    // The failed clients clear aborted before touching any of the other six
+    // still-local entities — leads (and, by the same code path, quotes,
+    // policies, tasks, documents, notifications) are untouched.
+    expect(result.current.counts.leads).toBe(leadsCountBefore);
+  });
+
+  it("loadDemoData aborts without generating a new demo set when the initial clear fails", async () => {
+    const { result } = renderHook(() => useDemoData(), { wrapper });
+    await waitFor(() => expect(result.current.hasDemoData).toBe(false));
+
+    await act(async () => {
+      await result.current.loadDemoData();
+    });
+    await waitFor(() => expect(result.current.hasDemoData).toBe(true));
+    const clientsCountAfterFirstLoad = result.current.counts.clients;
+
+    const originalSetItem = Storage.prototype.setItem;
+    const setItemSpy = vi.spyOn(Storage.prototype, "setItem").mockImplementation(function (
+      this: Storage,
+      key: string,
+      value: string
+    ) {
+      if (key === `${STORAGE_KEYS.clients}@v2`) throw new Error("simulated storage failure");
+      return originalSetItem.call(this, key, value);
+    });
+
+    let loadResult: Awaited<ReturnType<typeof result.current.loadDemoData>> | undefined;
+    await act(async () => {
+      loadResult = await result.current.loadDemoData();
+    });
+    setItemSpy.mockRestore();
+
+    expect(loadResult?.ok).toBe(false);
+    // clearDemoData() (loadDemoData()'s first step) failed, so no new demo
+    // batch was ever generated or loaded.
+    expect(result.current.counts.clients).toBe(clientsCountAfterFirstLoad);
   });
 });
