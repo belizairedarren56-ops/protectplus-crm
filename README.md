@@ -4,11 +4,11 @@ An internal CRM for a small insurance agency: clients, leads, quotes, policies,
 tasks, a document center, reports, and settings. Built with Next.js (App
 Router) and TypeScript.
 
-**Current data layer: `clients` is backed by Supabase in `supabase` mode
-(real auth, real Row Level Security); every other entity (leads, quotes,
-policies, tasks, documents, notes, notifications) is still `localStorage`,
-single browser.** Which mode is active is an explicit choice —
-`NEXT_PUBLIC_DATA_BACKEND=demo|supabase` (see `.env.example`) — not
+**Current data layer: clients, quotes, policies, tasks, documents, client
+notes, and family members are all backed by Supabase in `supabase` mode
+(real auth, real Row Level Security); only leads and notifications are still
+`localStorage`, single browser.** Which mode is active is an explicit choice
+— `NEXT_PUBLIC_DATA_BACKEND=demo|supabase` (see `.env.example`) — not
 auto-detected from whether Supabase is configured. Do not enter real client,
 policy, or financial data outside a properly access-controlled, hosted
 deployment. See [Architecture](#architecture) and [Roadmap](#roadmap) below
@@ -52,8 +52,10 @@ components/
   ui/                 Reusable primitives: Button, Modal, Card, Table, Badge...
   layout/             AppShell, Sidebar, Topbar, GlobalSearch, NotificationBell
   clients/ leads/ quotes/ policies/ tasks/   Feature-specific components
-hooks/                One hook per entity (useClients, useQuotes, ...), all
-                       thin wrappers around useLocalStorageList
+hooks/                One hook per entity (useClients, useQuotes, ...).
+                       Supabase-backed entities: real repository + TanStack
+                       Query. leads/notifications: thin wrappers around
+                       useLocalStorageList
 lib/
   storage.ts           localStorage get/set helpers + key registry
   demoData.ts           Pure sample-data generators (no side effects)
@@ -63,29 +65,45 @@ e2e/                   Playwright specs
 **/__tests__/          Vitest specs, colocated with what they test
 ```
 
-**Data flow — `clients` (Supabase-backed, both modes go through one hook).**
-`hooks/useClients()` always calls the same TanStack Query hooks regardless of
-backend; only the *repository* it queries through is selected by a plain
-function (`lib/repositories/clientsRepository.ts`'s factory in `supabase`
-mode, `lib/repositories/demoClientsRepository.ts` — a hook-free wrapper
-around `localStorage` — in `demo` mode). Both backends share one query
-cache, keyed by the current access scope (`hooks/useAccessScope.ts`), so
+**Data flow — Supabase-backed entities (`Client`, `Quote`, `Policy`, `Task`,
+`Document`, family members, client notes — both modes go through one hook
+each).** `hooks/useClients()` and its six siblings always call the same
+TanStack Query hooks regardless of backend; only the *repository* each one
+queries through is selected by a plain function
+(`lib/repositories/<entity>Repository.ts`'s factory in `supabase` mode,
+`lib/repositories/demo<Entity>Repository.ts` — hook-free wrappers around
+`localStorage` — in `demo` mode). Both backends share one query cache per
+entity, keyed by the current access scope (`hooks/useAccessScope.ts`), so
 every consumer reads from the same source of truth instead of an independent
 local copy. Repository methods return a typed `Result<T, Error>` rather than
 throwing; `lib/result.ts`'s `unwrap()` is the one place that gets translated
-into the throw/reject TanStack Query actually needs.
+into the throw/reject TanStack Query actually needs. Every list-shaped
+entity (quotes/policies/tasks/documents/family members) fetches its whole
+RLS-scoped list once per scope and lets consumers filter client-side (e.g.
+the client detail page's tabs); `useClientNotes(clientId)` is the one
+exception, keyed per-client since it's only ever read one client at a time.
+`client_notes` writes go through a dedicated `upsert_client_profile_note()`
+RPC rather than a plain `.upsert()`, because Postgres can't target a partial
+unique index (the mechanism that allows exactly one "profile" note per
+client while leaving room for a future many-per-client note timeline)
+through PostgREST's generic upsert. `family_members` has no owner column of
+its own — visibility follows the parent client's assigned producer — and no
+`is_demo` tag, since it cascade-deletes with its parent client instead.
 
-**Data flow — everything else (`Lead`, `Quote`, `Policy`, `Task`, `Document`,
-`Notification`, `client_notes`).** Still `localStorage`-backed, one hook per
-entity in `hooks/`, all thin wrappers around `useLocalStorageList`. In
-`demo` mode the storage key is the same static name it's always been; in
+**Data flow — `leads` and `notifications`.** Still `localStorage`-backed,
+one hook per entity in `hooks/`, thin wrappers around `useLocalStorageList`.
+In `demo` mode the storage key is the same static name it's always been; in
 `supabase` mode it's scoped by the full signed-in identity
 (`lib/scopedStorage.ts`) so two different people on the same shared browser
-never read or write each other's still-local data, even though `clients`
-itself is already protected by real Supabase RLS. A one-time, versioned,
+never read or write each other's still-local data, even though every other
+entity is already protected by real Supabase RLS. A one-time, versioned,
 crash-recoverable migration (`lib/localDataMigrations.ts`) converts a
 browser's pre-existing numeric-id data to the current string-id shape the
-first time it loads; the original data is never mutated, only read.
+first time it loads; the original data is never mutated, only read. This
+same migration also carries `quotes`/`policies`/`tasks`/`documents` forward
+for `demo`-mode users (their own id, and any legacy free-text
+producer/assignee field, converts the same way), since `demo` mode never
+touches Supabase for any entity.
 
 **Demo data vs. real data.** `lib/demoData.ts` exports pure generator
 functions — they return data, they never touch storage. `hooks/useDemoData.ts`
@@ -112,28 +130,35 @@ policies, quotes, tasks, notes, or documents. Restoring clears the flag.
 
 ## Roadmap
 
-Phase 1 (UI, `localStorage`) and Phase 2 (Supabase schema/RLS/auth
-foundation) are complete. **Phase 3A (this phase) migrates `clients` off
-`localStorage` onto Supabase** — real auth, real Row Level Security,
-producers only seeing their own assigned clients, admins seeing the whole
-agency. Every other entity is still `localStorage`, staged for its own
-future phase (`policies`/`quotes`/`tasks`/`documents`/`client_notes`/
-`family_members`, then `leads`, then `notifications`, then agency settings —
-see the Phase 3 planning doc). Known, deliberate limitations of the current
-phase:
+Phase 1 (UI, `localStorage`), Phase 2 (Supabase schema/RLS/auth
+foundation), Phase 3A (`clients` onto Supabase), and **Phase 3B (this
+phase — `policies`, `quotes`, `tasks`, `documents`, `client_notes`, and
+`family_members` onto Supabase)** are complete. Every entity that has real
+auth-backed ownership now has real Row Level Security enforcing it:
+producers only see their own assigned clients/quotes/policies/tasks (and,
+via the parent client, their own family members and notes), admins see the
+whole agency. Only `leads` (Phase 3C) and `notifications` (Phase 3D) remain
+`localStorage`, followed by agency settings (Phase 3E) — see the Phase 3
+planning doc. Known, deliberate limitations of the current phase:
 
 - `NEXT_PUBLIC_DATA_BACKEND=demo` (the default outside production) behaves
   exactly like before — no Supabase involved at all for anyone who hasn't
   explicitly opted into `supabase` mode.
-- Only `clients` is Supabase-backed; `leads`/`quotes`/`policies`/`tasks`/
-  `documents`/`notifications`/`client_notes` remain `localStorage`, now
-  scoped per signed-in identity in `supabase` mode (see Architecture above)
-  but not yet backed by a real database or shared between users.
-- No permanent-delete UI for clients — archive/restore only, same as before.
-  A real permanent-delete path (admin-only, audited) is a future phase.
-- Producer/assignee fields on the still-local entities (policies, quotes,
-  tasks) remain free-text strings, not real user references — only
-  `clients.assignedProducerId` is a real `profiles` reference so far.
+- `leads`/`notifications` remain `localStorage`, scoped per signed-in
+  identity in `supabase` mode (see Architecture above) but not yet backed by
+  a real database or shared between users.
+- No permanent-delete UI for clients (or any other entity) — archive/restore
+  only for clients, hard delete for quotes/policies/tasks/documents (admin-
+  only for quotes/policies/documents, owner-or-admin for tasks, matching
+  each entity's RLS policy) with no audit trail yet. A real audited
+  permanent-delete path is a future phase.
+- Documents are metadata-only — no real file upload/storage yet;
+  `storage_path` stays reserved, unused.
+- `Driver Licenses` and `Medical Documents` document folders stay disabled
+  by default (`NEXT_PUBLIC_ENABLE_SENSITIVE_DOCUMENT_FOLDERS`), pending
+  agency counsel/compliance sign-off on storage and retention design.
+- No add/edit/remove UI for family members yet — still read-only display,
+  only its data source changed this phase.
 - `npm audit` currently reports high-severity findings inside `next`'s and
   `eslint`'s own dependency trees (`postcss`, `sharp`, `minimatch`). The
   suggested `npm audit fix --force` would downgrade `next` to `9.3.3` — do
