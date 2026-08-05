@@ -1,16 +1,17 @@
 import { expect, test } from "@playwright/test";
 
 // Supabase-mode counterpart to add-client-supabase.spec.ts, covering the
-// six entities this phase migrated: creates a client, then a
+// entities Phase 3B and 3C migrated: creates a client, then a
 // policy/quote/task/document for it, edits and deletes one, reloads to
 // prove server-side persistence (not just an optimistic cache), saves a
-// profile note and reloads to prove it round-trips, and confirms the
-// read-only Family Members tab renders without error. One spec covering
-// all six is intentional — they share the same login/client-creation setup
-// cost, keeping the Supabase-mode Playwright surface small and fast rather
-// than proliferating specs that each re-pay that cost. Gated exactly like
-// add-client-supabase.spec.ts: nothing to test without a configured,
-// running Supabase instance.
+// profile note and reloads to prove it round-trips, confirms the read-only
+// Family Members tab renders without error, and creates an unlinked lead
+// (AddLeadModal has no client picker) that survives a reload. One spec
+// covering all of them is intentional — they share the same
+// login/client-creation setup cost, keeping the Supabase-mode Playwright
+// surface small and fast rather than proliferating specs that each re-pay
+// that cost. Gated exactly like add-client-supabase.spec.ts: nothing to
+// test without a configured, running Supabase instance.
 const SUPABASE_CONFIGURED = Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL);
 
 test.describe("client entities — supabase mode", () => {
@@ -151,5 +152,22 @@ test.describe("client entities — supabase mode", () => {
     // not a React error boundary or a blank page. ────────────────────────
     await page.getByRole("button", { name: "Family Members" }).click();
     await expect(page.getByText("No family members on file")).toBeVisible();
+
+    // ── Lead: create, reload. Deliberately unlinked — AddLeadModal has no
+    // client picker (see the Phase 3C plan), so this proves real Supabase
+    // persistence for the create path the same way every other entity in
+    // this spec does; clientId linkage itself is proven instead at
+    // leadsRepository.test.ts and the importer's own tests, where it's
+    // actually set. The real drag interaction is proven separately by the
+    // unmodified, demo-mode e2e/lead-kanban.spec.ts. ─────────────────────
+    await page.goto("/leads");
+    await page.getByRole("button", { name: "+ New Lead" }).click();
+    const leadClientName = `E2E Lead ${Date.now()}`;
+    await page.getByPlaceholder("Jane Cooper").fill(leadClientName);
+    await page.getByRole("button", { name: "Save Lead" }).click();
+    await expect(page.getByText(leadClientName)).toBeVisible();
+
+    await page.reload();
+    await expect(page.getByText(leadClientName)).toBeVisible();
   });
 });
