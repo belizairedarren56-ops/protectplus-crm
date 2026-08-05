@@ -35,7 +35,6 @@ function toClient(input: NewClientInput, id: string): Client {
     insuranceTypes: input.insuranceTypes,
     createdAt: new Date().toISOString(),
     assignedProducerName: input.assignedProducerName,
-    familyMembers: input.familyMembers,
     isDemo: input.isDemo ?? false,
   };
 }

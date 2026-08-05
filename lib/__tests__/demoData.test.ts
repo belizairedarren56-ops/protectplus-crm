@@ -21,7 +21,6 @@ function resolveClients(count = 50): Client[] {
     insuranceTypes: draft.insuranceTypes,
     createdAt: draft.createdAt,
     assignedProducerName: draft.assignedProducerName,
-    familyMembers: draft.familyMembers,
     isDemo: true,
   }));
 }
@@ -94,5 +93,18 @@ describe("generateDemoDataForClients", () => {
     expect(demo.tasks).toHaveLength(0);
     expect(demo.documents).toHaveLength(0);
     expect(demo.notifications).toHaveLength(0);
+    expect(demo.familyMembers).toHaveLength(0);
+  });
+
+  it("every generated family member references a real, resolved client and has no id of its own", () => {
+    const clients = resolveClients();
+    const demo = generateDemoDataForClients(1, clients);
+    const clientIds = new Set(clients.map((client) => client.id));
+
+    expect(demo.familyMembers.length).toBeGreaterThan(0);
+    for (const member of demo.familyMembers) {
+      expect(clientIds.has(member.clientId)).toBe(true);
+      expect(member).not.toHaveProperty("id");
+    }
   });
 });

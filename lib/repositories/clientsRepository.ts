@@ -2,7 +2,7 @@ import type { PostgrestError, SupabaseClient } from "@supabase/supabase-js";
 import type { DataBackendError } from "@/lib/dataMode";
 import type { Result } from "@/lib/result";
 import type { Database } from "@/lib/supabase/database.types";
-import type { Client, FamilyMember, InsuranceType } from "@/types";
+import type { Client, InsuranceType } from "@/types";
 
 export type NewClientInput = {
   firstName: string;
@@ -24,9 +24,6 @@ export type NewClientInput = {
   /** `demo` mode only — the Supabase repository ignores this and derives
    * the display name via the `profiles` join at read time instead. */
   assignedProducerName?: string;
-  /** `demo` mode only — `family_members` is a separate Supabase table, not
-   * migrated this phase, so the Supabase repository ignores this entirely. */
-  familyMembers?: FamilyMember[];
   isDemo?: boolean;
 };
 

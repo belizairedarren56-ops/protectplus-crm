@@ -12,6 +12,8 @@ export type Priority = "Low" | "Medium" | "High";
 
 export type FamilyMember = {
   id: string;
+  /** References Client.id — a string in both backends since Phase 3A. */
+  clientId: string;
   name: string;
   relationship: string;
   dateOfBirth?: string;
@@ -37,7 +39,6 @@ export type Client = {
   policyNumber?: string;
   insuranceTypes?: InsuranceType[];
   createdAt?: string;
-  familyMembers?: FamilyMember[];
   /** Real `profiles.id`, `supabase` mode only — the actual RLS-enforced
    * ownership column. Absent in `demo` mode (no real profiles exist). */
   assignedProducerId?: string;

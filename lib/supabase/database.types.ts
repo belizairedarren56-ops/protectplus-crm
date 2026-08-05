@@ -375,6 +375,7 @@ export type Database = {
           created_by: string | null
           date_of_birth: string | null
           id: string
+          legacy_id: string | null
           name: string
           relationship: string
           updated_at: string
@@ -387,6 +388,7 @@ export type Database = {
           created_by?: string | null
           date_of_birth?: string | null
           id?: string
+          legacy_id?: string | null
           name: string
           relationship: string
           updated_at?: string
@@ -399,6 +401,7 @@ export type Database = {
           created_by?: string | null
           date_of_birth?: string | null
           id?: string
+          legacy_id?: string | null
           name?: string
           relationship?: string
           updated_at?: string

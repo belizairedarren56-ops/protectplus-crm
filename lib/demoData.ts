@@ -1,9 +1,9 @@
 import { CARRIERS, CLIENT_STATUSES, INSURANCE_TYPES, PRODUCERS } from "@/lib/constants";
+import type { NewFamilyMemberInput } from "@/lib/repositories/familyMembersRepository";
 import { LEAD_STAGES, DOCUMENT_FOLDERS } from "@/types";
 import type {
   Client,
   Document,
-  FamilyMember,
   InsuranceType,
   Lead,
   Notification,
@@ -187,9 +187,6 @@ export type DemoClientDraft = {
   createdAt: string;
   /** demo-mode display only — the Supabase repository ignores this. */
   assignedProducerName: string;
-  /** demo-mode only — family_members isn't migrated this phase, so this is
-   * dropped entirely when generating for the `supabase` backend. */
-  familyMembers: FamilyMember[];
   isDemo: true;
 };
 
@@ -216,14 +213,6 @@ function generateClientDraft(rng: Rng): DemoClientDraft {
     insuranceTypes,
     createdAt: isoDaysFromNow(-randomInt(rng, 5, 700)),
     assignedProducerName: pick(rng, PRODUCERS),
-    familyMembers:
-      rng() > 0.5
-        ? pickMany(rng, FIRST_NAMES, randomInt(rng, 1, 2)).map((name, index) => ({
-            id: `demo-fam-${index}-${name}`,
-            name: `${name} ${lastName}`,
-            relationship: pick(rng, ["Spouse", "Child", "Parent"]),
-          }))
-        : [],
     isDemo: true,
   };
 }
@@ -252,6 +241,11 @@ export type DemoDataSet = {
   tasks: Task[];
   documents: Document[];
   notifications: Notification[];
+  /** No numeric id of its own yet — family_members is Supabase/repository-
+   * backed from day one this phase (see familyMembersRepository.ts), so the
+   * caller (useDemoData) creates each one through the real repository,
+   * exactly like resolving client ids through createDemoBatch(). */
+  familyMembers: NewFamilyMemberInput[];
 };
 
 /**
@@ -260,13 +254,16 @@ export type DemoDataSet = {
  * (`String(Date.now())`-based) or by Postgres (real UUIDs, after
  * `clientsRepository.createDemoBatch()` returns). `startId` seeds these
  * entities' own numeric ids (unaffected by the client id-format change).
+ * `familyMembers` moved here from `generateClientDraft()` for the same
+ * reason: it needs a resolved `clientId` to reference, which doesn't exist
+ * until stage 1's client drafts have actually been created.
  */
 export function generateDemoDataForClients(startId: number, clients: Client[]): DemoDataSet {
   const rng = mulberry32(20260731);
   let nextId = startId;
 
   if (clients.length === 0) {
-    return { policies: [], leads: [], quotes: [], tasks: [], documents: [], notifications: [] };
+    return { policies: [], leads: [], quotes: [], tasks: [], documents: [], notifications: [], familyMembers: [] };
   }
 
   const policies: Policy[] = Array.from({ length: 25 }, (_, index) => {
@@ -436,5 +433,18 @@ export function generateDemoDataForClients(startId: number, clients: Client[]): 
     },
   ];
 
-  return { policies, leads, quotes, tasks, documents, notifications };
+  // Roughly half of clients get 1-2 family members — same odds
+  // generateClientDraft() used to apply before this generation step moved
+  // here to reference a resolved clientId.
+  const familyMembers: NewFamilyMemberInput[] = clients.flatMap((client) =>
+    rng() > 0.5
+      ? pickMany(rng, FIRST_NAMES, randomInt(rng, 1, 2)).map((name) => ({
+          clientId: client.id,
+          name: `${name} ${client.lastName}`,
+          relationship: pick(rng, ["Spouse", "Child", "Parent"]),
+        }))
+      : []
+  );
+
+  return { policies, leads, quotes, tasks, documents, notifications, familyMembers };
 }
