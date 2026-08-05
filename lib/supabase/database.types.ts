@@ -305,6 +305,8 @@ export type Database = {
           file_type: string | null
           folder: Database["public"]["Enums"]["document_folder"]
           id: string
+          is_demo: boolean
+          legacy_id: string | null
           name: string
           storage_path: string | null
           updated_at: string
@@ -318,6 +320,8 @@ export type Database = {
           file_type?: string | null
           folder: Database["public"]["Enums"]["document_folder"]
           id?: string
+          is_demo?: boolean
+          legacy_id?: string | null
           name: string
           storage_path?: string | null
           updated_at?: string
@@ -331,6 +335,8 @@ export type Database = {
           file_type?: string | null
           folder?: Database["public"]["Enums"]["document_folder"]
           id?: string
+          is_demo?: boolean
+          legacy_id?: string | null
           name?: string
           storage_path?: string | null
           updated_at?: string
@@ -895,6 +901,7 @@ export type Database = {
         }
       }
       clear_agency_demo_clients: { Args: never; Returns: number }
+      clear_agency_demo_documents: { Args: never; Returns: number }
       current_agency_id: { Args: never; Returns: string }
       is_admin: { Args: never; Returns: boolean }
       owns_or_admin: { Args: { owner: string }; Returns: boolean }

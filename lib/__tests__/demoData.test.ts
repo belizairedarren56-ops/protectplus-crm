@@ -70,7 +70,11 @@ describe("generateDemoDataForClients", () => {
     }
   });
 
-  it("produces unique ids across every generated entity", () => {
+  it("produces unique ids across every generated entity with a generator-assigned id", () => {
+    // documents (and family_members) carry no numeric id of their own —
+    // both are created through their real repository (see useDemoData.ts),
+    // which assigns the id, so there's nothing to check uniqueness against
+    // here.
     const clients = resolveClients();
     const demo = generateDemoDataForClients(1, clients);
     const allIds = [
@@ -78,7 +82,6 @@ describe("generateDemoDataForClients", () => {
       ...demo.leads.map((l) => l.id),
       ...demo.quotes.map((q) => q.id),
       ...demo.tasks.map((t) => t.id),
-      ...demo.documents.map((d) => d.id),
       ...demo.notifications.map((n) => n.id),
     ];
 

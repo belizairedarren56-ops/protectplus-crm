@@ -49,6 +49,30 @@ describe("ensureLocalDataMigrated", () => {
     expect(quotes[0].clientId).toBe(clients[0].id); // relationship still resolves after conversion
   });
 
+  it("Phase 3B: stringifies documents' own id (Supabase-backed), but leaves leads' own id a number (still local)", async () => {
+    seedLegacyFixture();
+    window.localStorage.setItem(
+      "protectplus-documents",
+      JSON.stringify([{ id: 42, name: "app.pdf", folder: "Applications" }])
+    );
+    window.localStorage.setItem(
+      "protectplus-leads",
+      JSON.stringify([{ id: 7, clientName: "Jane Cooper" }])
+    );
+
+    await ensureLocalDataMigrated();
+
+    const documents = JSON.parse(window.localStorage.getItem("protectplus-documents@v2")!);
+    const leads = JSON.parse(window.localStorage.getItem("protectplus-leads@v2")!);
+
+    expect(documents[0].id).toBe("42");
+    expect(typeof documents[0].id).toBe("string");
+    // leads isn't migrated until Phase 3C — its own id must stay a number,
+    // matching the still-unchanged Lead.id: number type.
+    expect(leads[0].id).toBe(7);
+    expect(typeof leads[0].id).toBe("number");
+  });
+
   it("(correction 4.1.3) includes notifications, copied via an identity transform", async () => {
     seedLegacyFixture();
 

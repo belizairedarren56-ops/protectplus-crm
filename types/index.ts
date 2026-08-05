@@ -165,7 +165,7 @@ export const DOCUMENT_FOLDERS: DocumentFolder[] = [
 ];
 
 export type Document = {
-  id: number;
+  id: string;
   name: string;
   folder: DocumentFolder;
   /** References Client.id — a string in both backends since Phase 3A. */
@@ -173,6 +173,8 @@ export type Document = {
   clientName?: string;
   uploadedAt: string;
   fileType: string;
+  /** `supabase` mode only — the agency this record belongs to. */
+  agencyId?: string;
   isDemo?: boolean;
 };
 

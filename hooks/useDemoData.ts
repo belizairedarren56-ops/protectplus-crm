@@ -21,9 +21,16 @@ import type { Result } from "@/lib/result";
  * write. `supabase` mode: the clients step goes through
  * loadDemoClients()/clearDemoClients() (admin-only — see Settings page —
  * both gated by RLS too, not just this UI), and because client UUIDs aren't
- * known until Postgres assigns them, the other six entities' demo data is
+ * known until Postgres assigns them, the other entities' demo data is
  * generated *after* clients resolve, referencing their real returned ids —
  * not predicted up front the way a single-array localStorage pass could.
+ *
+ * Every failure-capable step (anything that's a real repository/RPC call,
+ * not a synchronous local-state write) runs BEFORE the guaranteed-to-
+ * succeed setLeads/setQuotes/setPolicies/setTasks/setNotifications calls,
+ * in both clearDemoData() and loadDemoData() — preserving the "abort
+ * before touching the next entity" discipline even though not every entity
+ * this hook touches can fail the same way anymore.
  */
 export function useDemoData() {
   const scope = useAccessScope();
@@ -32,26 +39,18 @@ export function useDemoData() {
   const { quotes, setQuotes } = useQuotes();
   const { policies, setPolicies } = usePolicies();
   const { tasks, setTasks } = useTasks();
-  const { documents, setDocuments } = useDocuments();
+  const { documents, loadDemoDocuments, clearDemoDocuments } = useDocuments();
   const { notifications, setNotifications } = useNotifications();
   const { familyMembers, createFamilyMember, deleteFamilyMember } = useFamilyMembers();
 
   const isAdmin = scope.status === "ready" && (scope.backend === "demo" || scope.role === "admin");
 
-  // Aborts before touching any of the six still-local entities if the
-  // Supabase client-clear operation itself fails — a partial clear (real
-  // clients' demo tag stays intact but leads/quotes/etc. already got wiped)
-  // would be a worse, more confusing state than doing nothing at all.
   const clearDemoData = useCallback(async (): Promise<Result<void, DataBackendError>> => {
     const cleared = await clearDemoClients();
     if (!cleared.ok) return cleared;
 
-    setLeads((current) => current.filter((lead) => !lead.isDemo));
-    setQuotes((current) => current.filter((quote) => !quote.isDemo));
-    setPolicies((current) => current.filter((policy) => !policy.isDemo));
-    setTasks((current) => current.filter((task) => !task.isDemo));
-    setDocuments((current) => current.filter((document) => !document.isDemo));
-    setNotifications((current) => current.filter((notification) => !notification.isDemo));
+    const clearedDocuments = await clearDemoDocuments();
+    if (!clearedDocuments.ok) return clearedDocuments;
 
     // family_members has no is_demo tag and no dedicated clear RPC — in
     // `supabase` mode, Postgres's own `on delete cascade` already removed
@@ -67,9 +66,16 @@ export function useDemoData() {
       if (deleteFailure && !deleteFailure.ok) return deleteFailure;
     }
 
+    setLeads((current) => current.filter((lead) => !lead.isDemo));
+    setQuotes((current) => current.filter((quote) => !quote.isDemo));
+    setPolicies((current) => current.filter((policy) => !policy.isDemo));
+    setTasks((current) => current.filter((task) => !task.isDemo));
+    setNotifications((current) => current.filter((notification) => !notification.isDemo));
+
     return { ok: true, data: undefined };
   }, [
     clearDemoClients,
+    clearDemoDocuments,
     scope.backend,
     familyMembers,
     deleteFamilyMember,
@@ -77,7 +83,6 @@ export function useDemoData() {
     setQuotes,
     setPolicies,
     setTasks,
-    setDocuments,
     setNotifications,
   ]);
 
@@ -114,12 +119,8 @@ export function useDemoData() {
 
     const demo = generateDemoDataForClients(Date.now(), created.data);
 
-    setLeads((current) => [...demo.leads, ...current]);
-    setQuotes((current) => [...demo.quotes, ...current]);
-    setPolicies((current) => [...demo.policies, ...current]);
-    setTasks((current) => [...demo.tasks, ...current]);
-    setDocuments((current) => [...demo.documents, ...current]);
-    setNotifications((current) => [...demo.notifications, ...current]);
+    const loadedDocuments = await loadDemoDocuments(demo.documents);
+    if (!loadedDocuments.ok) return loadedDocuments;
 
     // No batch-create endpoint for family_members (see
     // familyMembersRepository.ts) — created one at a time through the real
@@ -131,16 +132,22 @@ export function useDemoData() {
     const familyMemberFailure = familyMemberResults.find((result) => !result.ok);
     if (familyMemberFailure && !familyMemberFailure.ok) return familyMemberFailure;
 
+    setLeads((current) => [...demo.leads, ...current]);
+    setQuotes((current) => [...demo.quotes, ...current]);
+    setPolicies((current) => [...demo.policies, ...current]);
+    setTasks((current) => [...demo.tasks, ...current]);
+    setNotifications((current) => [...demo.notifications, ...current]);
+
     return { ok: true, data: undefined };
   }, [
     clearDemoData,
     loadDemoClients,
+    loadDemoDocuments,
     createFamilyMember,
     setLeads,
     setQuotes,
     setPolicies,
     setTasks,
-    setDocuments,
     setNotifications,
   ]);
 

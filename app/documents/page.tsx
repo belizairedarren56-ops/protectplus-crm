@@ -17,8 +17,10 @@ import { formatDate } from "@/lib/format";
 import type { Document, DocumentFolder } from "@/types";
 
 export default function DocumentsPage() {
-  const { documents, setDocuments, documentsLoaded } = useDocuments();
+  const { documents, documentsLoaded, isError, error, createDocument } = useDocuments();
   const [selectedFolder, setSelectedFolder] = useState<DocumentFolder | null>(null);
+  const [isCreating, setIsCreating] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
 
   // Filtered at the data level, not just the folder-picker UI — a hidden
   // folder must not leak its contents into "All Documents" either.
@@ -31,18 +33,18 @@ export default function DocumentsPage() {
     ? accessibleDocuments.filter((document) => document.folder === selectedFolder)
     : accessibleDocuments;
 
-  function addPlaceholder(folder: DocumentFolder) {
+  async function addPlaceholder(folder: DocumentFolder) {
     const extension = folder === "Driver Licenses" || folder.includes("Photos") ? "jpg" : "pdf";
 
-    const placeholder: Document = {
-      id: Date.now(),
+    setIsCreating(true);
+    setCreateError(null);
+    const result = await createDocument({
       name: `New_${folder.replace(/\s+/g, "")}_${documents.length + 1}.${extension}`,
       folder,
-      uploadedAt: new Date().toISOString(),
       fileType: extension,
-    };
-
-    setDocuments((current) => [placeholder, ...current]);
+    });
+    if (!result.ok) setCreateError(result.error.message);
+    setIsCreating(false);
   }
 
   const columns: TableColumn<Document>[] = [
@@ -130,14 +132,29 @@ export default function DocumentsPage() {
         </h2>
 
         {selectedFolder && (
-          <Button size="sm" variant="secondary" onClick={() => addPlaceholder(selectedFolder)}>
-            + Add Placeholder File
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={() => addPlaceholder(selectedFolder)}
+            disabled={isCreating}
+          >
+            {isCreating ? "Adding..." : "+ Add Placeholder File"}
           </Button>
         )}
       </div>
 
+      {createError && (
+        <p role="alert" className="mt-3 text-sm text-red-400">
+          {createError}
+        </p>
+      )}
+
       <div className="mt-4">
-        {!documentsLoaded ? (
+        {isError ? (
+          <div className="rounded-2xl border border-red-500/40 bg-red-500/10 px-6 py-16 text-center text-red-300">
+            Could not load documents{error ? `: ${error.message}` : "."}
+          </div>
+        ) : !documentsLoaded ? (
           <div className="rounded-2xl border border-yellow-500/20 bg-black/75 px-6 py-16 text-center text-gray-500">
             Loading documents...
           </div>

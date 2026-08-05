@@ -100,14 +100,24 @@ function readLegacyStrict(entity: LegacyEntityName): Result<unknown[], DataBacke
   return { ok: true, data: parsed };
 }
 
+// Entities whose OWN id becomes a string, not just their clientId
+// references — grows as each entity's Phase 3B slice lands (Document.id
+// today; Task/Quote/Policy.id join this list when their own slices change
+// their type from number to string). Leads stays off this list — Lead.id
+// remains a number until Phase 3C migrates leads — so this must never grow
+// ahead of an entity's actual type change, or that entity's still-untouched
+// UI (numeric id comparisons, etc.) would silently break.
+const ENTITIES_WITH_STRING_ID: LegacyEntityName[] = ["documents"];
+
 // clients: id -> String(id), and the legacy free-text `producer` field
 // (pre-Phase-3A shape) renamed to assignedProducerName — the field every
 // current UI path actually reads. Without this rename, a browser's existing
 // producer assignment would silently become unreadable after migration:
 // still present in the raw stored JSON, but orphaned, since Client no longer
 // has a `producer` field at all. The five clientId-bearing entities:
-// clientId -> String(clientId), only when present (several are optional).
-// notifications: identity — nothing to convert, just copied into the
+// clientId -> String(clientId), only when present (several are optional),
+// and (for entities in ENTITIES_WITH_STRING_ID) their own id -> String(id)
+// too. notifications: identity — nothing to convert, just copied into the
 // versioned namespace.
 function transform(entity: LegacyEntityName, legacy: unknown[]): unknown[] {
   if (entity === "clients") {
@@ -129,10 +139,18 @@ function transform(entity: LegacyEntityName, legacy: unknown[]): unknown[] {
   if (entity === "notifications") {
     return legacy;
   }
+
+  const stringifyOwnId = ENTITIES_WITH_STRING_ID.includes(entity);
   return legacy.map((raw) => {
-    const record = raw as { clientId?: number | string; [key: string]: unknown };
-    if (record.clientId === undefined || record.clientId === null) return record;
-    return { ...record, clientId: String(record.clientId) };
+    const record = raw as { id?: number | string; clientId?: number | string; [key: string]: unknown };
+    const next: Record<string, unknown> = { ...record };
+    if (stringifyOwnId && record.id !== undefined && record.id !== null) {
+      next.id = String(record.id);
+    }
+    if (record.clientId !== undefined && record.clientId !== null) {
+      next.clientId = String(record.clientId);
+    }
+    return next;
   });
 }
 

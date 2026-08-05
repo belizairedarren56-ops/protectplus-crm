@@ -1,9 +1,9 @@
 import { CARRIERS, CLIENT_STATUSES, INSURANCE_TYPES, PRODUCERS } from "@/lib/constants";
+import type { NewDocumentInput } from "@/lib/repositories/documentsRepository";
 import type { NewFamilyMemberInput } from "@/lib/repositories/familyMembersRepository";
 import { LEAD_STAGES, DOCUMENT_FOLDERS } from "@/types";
 import type {
   Client,
-  Document,
   InsuranceType,
   Lead,
   Notification,
@@ -239,7 +239,10 @@ export type DemoDataSet = {
   leads: Lead[];
   quotes: Quote[];
   tasks: Task[];
-  documents: Document[];
+  /** No numeric id of its own — documents is Supabase/repository-backed
+   * from Phase 3B on (see documentsRepository.ts), so the caller
+   * (useDemoData) creates each one through the real repository. */
+  documents: NewDocumentInput[];
   notifications: Notification[];
   /** No numeric id of its own yet — family_members is Supabase/repository-
    * backed from day one this phase (see familyMembersRepository.ts), so the
@@ -356,8 +359,7 @@ export function generateDemoDataForClients(startId: number, clients: Client[]): 
   });
   nextId += tasks.length;
 
-  const documents: Document[] = [];
-  let docIndex = 0;
+  const documents: NewDocumentInput[] = [];
   const fileTypeByFolder: Record<string, string> = {
     Applications: "pdf",
     Declarations: "pdf",
@@ -375,16 +377,13 @@ export function generateDemoDataForClients(startId: number, clients: Client[]): 
       const fileType = fileTypeByFolder[folder];
 
       documents.push({
-        id: nextId + docIndex,
         name: `${client.lastName}_${folder.replace(/\s+/g, "")}_${i + 1}.${fileType}`,
         folder,
         clientId: client.id,
         clientName: `${client.firstName} ${client.lastName}`,
-        uploadedAt: isoDaysFromNow(-randomInt(rng, 0, 200)),
         fileType,
         isDemo: true,
       });
-      docIndex += 1;
     }
   }
   nextId += documents.length;
