@@ -105,7 +105,7 @@ describe("import_client_entities() — SECURITY DEFINER hardening", () => {
     expect(error).not.toBeNull();
   });
 
-  it("any failure rolls back all six entity imports together, not just the failing table", async () => {
+  it("any failure rolls back all seven entity imports together, not just the failing table", async () => {
     const legacyId = `rollback-${Date.now()}`;
     const bogusClientId = "00000000-0000-0000-0000-000000000000";
 
@@ -150,32 +150,43 @@ describe("import_client_entities() — SECURITY DEFINER hardening", () => {
       ],
       p_client_notes: [{ clientId: clientUuid, body: "Should not persist" }],
       p_family_members: [
+        { legacyId: `${legacyId}-fam`, clientId: clientUuid, name: "Should not persist", relationship: "Spouse" },
+      ],
+      p_leads: [
         // The one deliberately-invalid record — an unresolvable client —
         // which must cause the ENTIRE call to fail, not just this insert.
-        { legacyId: `${legacyId}-fam`, clientId: bogusClientId, name: "Nobody", relationship: "Spouse" },
+        {
+          legacyId: `${legacyId}-lead`,
+          clientId: bogusClientId,
+          producerId: producer.userId,
+          clientName: "Nobody",
+          insuranceType: "Auto",
+        },
       ],
     });
 
     expect(error).not.toBeNull();
 
-    const [policies, quotes, tasks, documents, notes, family] = await Promise.all([
+    const [policies, quotes, tasks, documents, notes, family, leads] = await Promise.all([
       admin.from("policies").select("id").eq("agency_id", agencyId).eq("legacy_id", `${legacyId}-policy`),
       admin.from("quotes").select("id").eq("agency_id", agencyId).eq("legacy_id", `${legacyId}-quote`),
       admin.from("tasks").select("id").eq("agency_id", agencyId).eq("legacy_id", `${legacyId}-task`),
       admin.from("documents").select("id").eq("agency_id", agencyId).eq("legacy_id", `${legacyId}-doc`),
       admin.from("client_notes").select("id").eq("agency_id", agencyId).eq("client_id", clientUuid),
       admin.from("family_members").select("id").eq("agency_id", agencyId).eq("legacy_id", `${legacyId}-fam`),
+      admin.from("leads").select("id").eq("agency_id", agencyId).eq("legacy_id", `${legacyId}-lead`),
     ]);
 
-    // Zero rows in every one of the five otherwise-valid entities, not just
-    // the sixth (family_members) that had the bad row — the property one
-    // atomic transaction actually promises.
+    // Zero rows in every one of the six otherwise-valid entities, not just
+    // the seventh (leads) that had the bad row — the property one atomic
+    // transaction actually promises.
     expect(policies.data).toHaveLength(0);
     expect(quotes.data).toHaveLength(0);
     expect(tasks.data).toHaveLength(0);
     expect(documents.data).toHaveLength(0);
     expect(notes.data).toHaveLength(0);
     expect(family.data).toHaveLength(0);
+    expect(leads.data).toHaveLength(0);
   });
 });
 
@@ -201,7 +212,7 @@ function runImporter(fixture: unknown): { status: number; stdout: string; stderr
 }
 
 describe("scripts/migrate-client-entities-to-supabase.ts — real subprocess against local Supabase", () => {
-  it("imports all six entities and is idempotent on a second run of the same file", async () => {
+  it("imports all seven entities and is idempotent on a second run of the same file", async () => {
     const runId = `run-${Date.now()}`;
     const fixture = {
       policies: [
@@ -246,6 +257,16 @@ describe("scripts/migrate-client-entities-to-supabase.ts — real subprocess aga
         { clientId: clientLegacyId, name: "Jane Imported", relationship: "Spouse" },
         { clientId: clientLegacyId, name: "Jack Imported", relationship: "Child" },
       ],
+      leads: [
+        {
+          id: `${runId}-lead`,
+          clientId: clientLegacyId,
+          clientName: "Imported Client",
+          insuranceType: "Auto",
+          stage: "New",
+          assignedProducerName: "Maria Gonzalez",
+        },
+      ],
     };
 
     const first = runImporter(fixture);
@@ -256,6 +277,7 @@ describe("scripts/migrate-client-entities-to-supabase.ts — real subprocess aga
     expect(first.stdout).toMatch(/documents:\s+1/);
     expect(first.stdout).toMatch(/clientNotes:\s+1/);
     expect(first.stdout).toMatch(/familyMembers:\s+2/);
+    expect(first.stdout).toMatch(/leads:\s+1/);
 
     const { data: policyRows } = await admin
       .from("policies")
@@ -265,9 +287,18 @@ describe("scripts/migrate-client-entities-to-supabase.ts — real subprocess aga
     expect(policyRows).toHaveLength(1);
     expect((policyRows as { producer_id: string }[])[0].producer_id).toBe(producer.userId);
 
+    const { data: leadRows } = await admin
+      .from("leads")
+      .select("id, producer_id, client_id")
+      .eq("agency_id", agencyId)
+      .eq("legacy_id", `${runId}-lead`);
+    expect(leadRows).toHaveLength(1);
+    expect((leadRows as { producer_id: string; client_id: string }[])[0].producer_id).toBe(producer.userId);
+    expect((leadRows as { producer_id: string; client_id: string }[])[0].client_id).toBe(clientUuid);
+
     // Re-running against the SAME file must insert zero NEW policy/quote/
-    // task/document/family-member rows (legacy_id-keyed idempotency), and
-    // must not create a second client_notes row (upsert-in-place instead).
+    // task/document/family-member/lead rows (legacy_id-keyed idempotency),
+    // and must not create a second client_notes row (upsert-in-place instead).
     const second = runImporter(fixture);
     expect(second.status).toBe(0);
     expect(second.stdout).toMatch(/policies:\s+0/);
@@ -275,6 +306,7 @@ describe("scripts/migrate-client-entities-to-supabase.ts — real subprocess aga
     expect(second.stdout).toMatch(/tasks:\s+0/);
     expect(second.stdout).toMatch(/documents:\s+0/);
     expect(second.stdout).toMatch(/familyMembers:\s+0/);
+    expect(second.stdout).toMatch(/leads:\s+0/);
 
     const { data: policyRowsAfterRerun } = await admin
       .from("policies")
@@ -282,6 +314,13 @@ describe("scripts/migrate-client-entities-to-supabase.ts — real subprocess aga
       .eq("agency_id", agencyId)
       .eq("legacy_id", `${runId}-policy`);
     expect(policyRowsAfterRerun).toHaveLength(1); // still exactly one, not two
+
+    const { data: leadRowsAfterRerun } = await admin
+      .from("leads")
+      .select("id")
+      .eq("agency_id", agencyId)
+      .eq("legacy_id", `${runId}-lead`);
+    expect(leadRowsAfterRerun).toHaveLength(1); // still exactly one, not two
 
     const { data: noteRows } = await admin
       .from("client_notes")
@@ -344,5 +383,30 @@ describe("scripts/migrate-client-entities-to-supabase.ts — real subprocess aga
     const result = runImporter(fixture);
     expect(result.status).not.toBe(0);
     expect(result.stderr + result.stdout).toMatch(/requires an assignee/i);
+  }, 60_000);
+
+  it("rejects a lead with no resolvable producer before ever calling the RPC", async () => {
+    const runId = `no-producer-${Date.now()}`;
+    const fixture = {
+      leads: [
+        {
+          id: `${runId}-lead`,
+          clientId: clientLegacyId,
+          clientName: "Orphaned Lead",
+          insuranceType: "Auto",
+        },
+      ],
+    };
+
+    const result = runImporter(fixture);
+    expect(result.status).not.toBe(0);
+    expect(result.stderr + result.stdout).toMatch(/requires a producer\/assignee/i);
+
+    const { data } = await admin
+      .from("leads")
+      .select("id")
+      .eq("agency_id", agencyId)
+      .eq("legacy_id", `${runId}-lead`);
+    expect(data).toHaveLength(0);
   }, 60_000);
 });

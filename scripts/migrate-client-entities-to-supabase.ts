@@ -1,10 +1,10 @@
 /**
- * One-time, human-run importer: takes a combined JSON export of the six
- * remaining Phase 3B entities (policies, quotes, tasks, documents,
- * client_notes, family_members) — each record still carrying whatever
- * legacy numeric client id the pre-migration `localStorage` shape used —
- * and writes them all into Supabase in one real database transaction via
- * the `import_client_entities()` RPC.
+ * One-time, human-run importer: takes a combined JSON export of the seven
+ * remaining Phase 3B/3C entities (policies, quotes, tasks, documents,
+ * client_notes, family_members, leads) — each record still carrying
+ * whatever legacy numeric client id the pre-migration `localStorage` shape
+ * used — and writes them all into Supabase in one real database
+ * transaction via the `import_client_entities()` RPC.
  *
  * Sibling to (not a rewrite of) migrate-clients-to-supabase.ts: clients
  * import first, independently, as always; this script runs AFTER, using
@@ -18,19 +18,19 @@
  * same typed-confirmation gate for anything non-local).
  *
  * Two-phase, same discipline as the clients importer: Phase A (read-only)
- * validates every record across ALL SIX arrays and resolves every
+ * validates every record across ALL SEVEN arrays and resolves every
  * clientId/producer/assignee reference to a real UUID, collecting every
  * failure across the entire file before writing anything. Phase B is one
  * RPC call — a single plpgsql function body is one implicit transaction,
  * so any exception anywhere inside it (including a hypothetical
- * cross-agency FK violation Phase A somehow missed) rolls back all six
+ * cross-agency FK violation Phase A somehow missed) rolls back all seven
  * entities' writes together, not just one table's. This is the property
- * six independently-atomic-but-not-jointly-atomic PostgREST upserts could
+ * seven independently-atomic-but-not-jointly-atomic PostgREST upserts could
  * never have delivered.
  *
- * Idempotency: policies/quotes/tasks/documents/family_members each carry
- * their own legacyId (the source record's original numeric id, as text)
- * under a unique(agency_id, legacy_id) constraint; family_members
+ * Idempotency: policies/quotes/tasks/documents/family_members/leads each
+ * carry their own legacyId (the source record's original numeric id, as
+ * text) under a unique(agency_id, legacy_id) constraint; family_members
  * synthesizes one (`${legacyClientId}-${index within that client's
  * family array}`) since it never had a real prior identity. client_notes
  * has no legacyId — it upserts against (agency_id, client_id) where
@@ -108,6 +108,20 @@ type LegacyFamilyMember = {
   dateOfBirth?: string;
 };
 
+type LegacyLead = {
+  id: number | string;
+  clientId?: number | string;
+  clientName: string;
+  insuranceType: string;
+  stage?: string;
+  priority?: string;
+  lastContact?: string;
+  phone?: string;
+  email?: string;
+  producer?: string;
+  assignedProducerName?: string;
+};
+
 type CombinedImportFile = {
   policies?: LegacyPolicy[];
   quotes?: LegacyQuote[];
@@ -115,6 +129,7 @@ type CombinedImportFile = {
   documents?: LegacyDocument[];
   clientNotes?: LegacyClientNote[];
   familyMembers?: LegacyFamilyMember[];
+  leads?: LegacyLead[];
 };
 
 function arg(name: string): string | undefined {
@@ -182,7 +197,7 @@ async function main() {
 
   if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
     console.error(
-      `${filePath} must contain a JSON object with policies/quotes/tasks/documents/clientNotes/familyMembers arrays.`
+      `${filePath} must contain a JSON object with policies/quotes/tasks/documents/clientNotes/familyMembers/leads arrays.`
     );
     process.exit(1);
   }
@@ -344,6 +359,24 @@ async function main() {
     };
   });
 
+  const resolvedLeads = (file.leads ?? []).map((record, index) => {
+    const clientId =
+      record.clientId !== undefined ? resolveClientId("Lead", index, record.clientId) : undefined;
+    const producerId = requireProducerId("Lead", index, producerName(record), "a producer/assignee");
+    return {
+      legacyId: String(record.id),
+      clientId,
+      producerId,
+      clientName: record.clientName,
+      insuranceType: record.insuranceType,
+      stage: record.stage,
+      priority: record.priority,
+      lastContact: record.lastContact,
+      phone: record.phone,
+      email: record.email,
+    };
+  });
+
   if (failures.length > 0) {
     console.error(`\n${failures.length} record(s) failed validation — importing NOTHING:\n`);
     failures.forEach((message) => console.error(`  - ${message}`));
@@ -356,14 +389,15 @@ async function main() {
     resolvedTasks.length +
     resolvedDocuments.length +
     resolvedClientNotes.length +
-    resolvedFamilyMembers.length;
+    resolvedFamilyMembers.length +
+    resolvedLeads.length;
 
   if (totalRecords === 0) {
     console.log("Nothing to import — the input file has no records across any entity.");
     return;
   }
 
-  // ── Phase B: one RPC call, one transaction, all six tables. Either the
+  // ── Phase B: one RPC call, one transaction, all seven tables. Either the
   // whole batch lands, or none of it does. ───────────────────────────────
 
   const { data, error } = await admin.rpc("import_client_entities", {
@@ -374,6 +408,7 @@ async function main() {
     p_documents: resolvedDocuments,
     p_client_notes: resolvedClientNotes,
     p_family_members: resolvedFamilyMembers,
+    p_leads: resolvedLeads,
   });
 
   if (error) {
@@ -388,6 +423,7 @@ async function main() {
     documents: number;
     clientNotes: number;
     familyMembers: number;
+    leads: number;
   };
 
   console.log("\nDone. New/updated rows written:");
@@ -397,6 +433,7 @@ async function main() {
   console.log(`  documents:     ${counts.documents}`);
   console.log(`  clientNotes:   ${counts.clientNotes}`);
   console.log(`  familyMembers: ${counts.familyMembers}`);
+  console.log(`  leads:         ${counts.leads}`);
 }
 
 main();
