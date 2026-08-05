@@ -118,7 +118,7 @@ export type Quote = {
 export type PolicyStatus = "Active" | "Renewal Due" | "Cancelled" | "Expired";
 
 export type Policy = {
-  id: number;
+  id: string;
   /** References Client.id — a string in both backends since Phase 3A. */
   clientId: string;
   clientName: string;
@@ -129,7 +129,11 @@ export type Policy = {
   expirationDate: string;
   status: PolicyStatus;
   premium: number;
-  producer: string;
+  /** Real `profiles.id`, `supabase` mode only — the actual RLS-enforced
+   * `producer_id` column. */
+  assignedProducerId?: string;
+  /** Denormalized display name, populated in both modes. */
+  assignedProducerName?: string;
   isDemo?: boolean;
 };
 

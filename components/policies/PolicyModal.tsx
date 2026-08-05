@@ -4,8 +4,13 @@ import { FormEvent, ReactNode, useMemo, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Modal } from "@/components/ui/Modal";
+import { useAccessScope } from "@/hooks/useAccessScope";
+import { useAgencyProducers } from "@/hooks/useAgencyProducers";
 import { useClients } from "@/hooks/useClients";
+import type { DataBackendError } from "@/lib/dataMode";
 import { CARRIERS, INSURANCE_TYPES, PRODUCERS } from "@/lib/constants";
+import type { NewPolicyInput } from "@/lib/repositories/policiesRepository";
+import type { Result } from "@/lib/result";
 import type { InsuranceType, Policy, PolicyStatus } from "@/types";
 
 const FIELD_CLASSES =
@@ -20,11 +25,19 @@ function todayIso(): string {
 type PolicyModalProps = {
   open: boolean;
   onClose: () => void;
-  onSave: (policy: Policy) => void;
+  onCreate: (input: NewPolicyInput) => Promise<Result<Policy, DataBackendError>>;
+  onUpdate: (id: string, patch: Partial<NewPolicyInput>) => Promise<Result<Policy, DataBackendError>>;
   policy?: Policy | null;
 };
 
-export function PolicyModal({ open, onClose, onSave, policy }: PolicyModalProps) {
+export function PolicyModal({ open, onClose, onCreate, onUpdate, policy }: PolicyModalProps) {
+  const scope = useAccessScope();
+  const isSupabase = scope.backend === "supabase";
+  const isAdmin = scope.status === "ready" && isSupabase && scope.role === "admin";
+  const currentUserId = scope.status === "ready" && isSupabase ? scope.userId : "";
+  // Only fires for an admin in supabase mode — see useAgencyProducers().
+  const producersQuery = useAgencyProducers();
+
   const { clients, isError: clientsErrored } = useClients();
 
   const selectableClients = useMemo(() => {
@@ -49,7 +62,8 @@ export function PolicyModal({ open, onClose, onSave, policy }: PolicyModalProps)
         expirationDate: policy.expirationDate.slice(0, 10),
         status: policy.status,
         premium: policy.premium,
-        producer: policy.producer,
+        assignedProducerName: policy.assignedProducerName ?? PRODUCERS[0],
+        assignedProducerId: policy.assignedProducerId ?? currentUserId,
       };
     }
 
@@ -64,9 +78,12 @@ export function PolicyModal({ open, onClose, onSave, policy }: PolicyModalProps)
       expirationDate: todayIso(),
       status: "Active" as PolicyStatus,
       premium: 0,
-      producer: PRODUCERS[0],
+      assignedProducerName: PRODUCERS[0],
+      assignedProducerId: currentUserId,
     };
   });
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   // See QuoteModal.tsx for why this is derived rather than trusted from
   // `formData.clientId` directly — this modal's own `useClients()` instance
@@ -82,20 +99,47 @@ export function PolicyModal({ open, onClose, onSave, policy }: PolicyModalProps)
     });
   }
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!effectiveClientId) return;
 
     const effectiveClient = selectableClients.find((item) => item.id === effectiveClientId);
+    const effectiveClientName = effectiveClient
+      ? `${effectiveClient.firstName} ${effectiveClient.lastName}`
+      : formData.clientName;
 
-    onSave({
-      id: policy?.id ?? Date.now(),
-      ...formData,
+    // producer_id is NOT NULL with no server-side default for an admin
+    // caller (force_owner_policies() only forces it for non-admins) — an
+    // admin must always send a real id; a producer omits it entirely and
+    // lets the trigger fill in auth.uid(), same as QuoteModal's producer path.
+    const assignee = isSupabase
+      ? isAdmin
+        ? { assignedProducerId: formData.assignedProducerId || currentUserId }
+        : {}
+      : { assignedProducerName: formData.assignedProducerName };
+
+    const input: NewPolicyInput = {
       clientId: effectiveClientId,
-      clientName: effectiveClient
-        ? `${effectiveClient.firstName} ${effectiveClient.lastName}`
-        : formData.clientName,
-    });
+      clientName: effectiveClientName,
+      carrier: formData.carrier,
+      policyNumber: formData.policyNumber,
+      product: formData.product,
+      effectiveDate: formData.effectiveDate,
+      expirationDate: formData.expirationDate,
+      status: formData.status,
+      premium: formData.premium,
+      ...assignee,
+    };
+
+    setSubmitting(true);
+    setError(null);
+    const result = policy ? await onUpdate(policy.id, input) : await onCreate(input);
+    setSubmitting(false);
+
+    if (!result.ok) {
+      setError(result.error.message);
+      return;
+    }
 
     onClose();
   }
@@ -230,15 +274,34 @@ export function PolicyModal({ open, onClose, onSave, policy }: PolicyModalProps)
           </FormField>
 
           <FormField label="Producer">
-            <select
-              value={formData.producer}
-              onChange={(event) => setFormData({ ...formData, producer: event.target.value })}
-              className={FIELD_CLASSES}
-            >
-              {PRODUCERS.map((producer) => (
-                <option key={producer}>{producer}</option>
-              ))}
-            </select>
+            {!isSupabase ? (
+              <select
+                value={formData.assignedProducerName}
+                onChange={(event) => setFormData({ ...formData, assignedProducerName: event.target.value })}
+                className={FIELD_CLASSES}
+              >
+                {PRODUCERS.map((producer) => (
+                  <option key={producer}>{producer}</option>
+                ))}
+              </select>
+            ) : isAdmin ? (
+              <select
+                value={formData.assignedProducerId}
+                onChange={(event) => setFormData({ ...formData, assignedProducerId: event.target.value })}
+                disabled={producersQuery.isLoading}
+                className={`${FIELD_CLASSES} disabled:opacity-50`}
+              >
+                {(producersQuery.data ?? []).map((producer) => (
+                  <option key={producer.id} value={producer.id}>
+                    {producer.fullName}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <p className="w-full rounded-xl border border-gray-800 bg-black/50 px-4 py-3 text-gray-400">
+                Assigned to you
+              </p>
+            )}
           </FormField>
 
           <FormField label="Status">
@@ -256,11 +319,15 @@ export function PolicyModal({ open, onClose, onSave, policy }: PolicyModalProps)
           </FormField>
         </div>
 
+        {error && <p role="alert" className="text-sm font-semibold text-red-400">{error}</p>}
+
         <div className="flex justify-end gap-3 pt-4">
-          <Button type="button" variant="secondary" onClick={onClose}>
+          <Button type="button" variant="secondary" onClick={onClose} disabled={submitting}>
             Cancel
           </Button>
-          <Button type="submit">{policy ? "Save Changes" : "Add Policy"}</Button>
+          <Button type="submit" disabled={submitting}>
+            {submitting ? "Saving..." : policy ? "Save Changes" : "Add Policy"}
+          </Button>
         </div>
       </form>
     </Modal>

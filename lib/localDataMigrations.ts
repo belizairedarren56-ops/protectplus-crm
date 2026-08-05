@@ -101,13 +101,12 @@ function readLegacyStrict(entity: LegacyEntityName): Result<unknown[], DataBacke
 }
 
 // Entities whose OWN id becomes a string, not just their clientId
-// references — grows as each entity's Phase 3B slice lands (Document.id,
-// Task.id, Quote.id today; Policy.id joins this list when its own slice
-// changes its type from number to string). Leads stays off this list —
-// Lead.id remains a number until Phase 3C migrates leads — so this must
-// never grow ahead of an entity's actual type change, or that entity's
-// still-untouched UI (numeric id comparisons, etc.) would silently break.
-const ENTITIES_WITH_STRING_ID: LegacyEntityName[] = ["documents", "tasks", "quotes"];
+// references — grows as each entity's Phase 3B slice lands. Every business
+// entity now on this list; leads stays off it — Lead.id remains a number
+// until Phase 3C migrates leads — so this must never grow ahead of an
+// entity's actual type change, or that entity's still-untouched UI
+// (numeric id comparisons, etc.) would silently break.
+const ENTITIES_WITH_STRING_ID: LegacyEntityName[] = ["documents", "tasks", "quotes", "policies"];
 
 // Entities whose pre-Phase-3B shape had a plain-text producer/assignee
 // field, since renamed to a `*Name` field matching the entity's real
@@ -121,6 +120,7 @@ const ENTITIES_WITH_STRING_ID: LegacyEntityName[] = ["documents", "tasks", "quot
 const ASSIGNEE_FIELD_RENAMES: Partial<Record<LegacyEntityName, { from: string; to: string }>> = {
   tasks: { from: "assignedTo", to: "assignedToName" },
   quotes: { from: "producer", to: "assignedProducerName" },
+  policies: { from: "producer", to: "assignedProducerName" },
 };
 
 // clients: id -> String(id), and the legacy free-text `producer` field

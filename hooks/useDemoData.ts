@@ -27,17 +27,20 @@ import type { Result } from "@/lib/result";
  *
  * Every failure-capable step (anything that's a real repository/RPC call,
  * not a synchronous local-state write) runs BEFORE the guaranteed-to-
- * succeed setLeads/setQuotes/setPolicies/setNotifications calls, in both
- * clearDemoData() and loadDemoData() — preserving the "abort before
- * touching the next entity" discipline even though not every entity this
- * hook touches can fail the same way anymore.
+ * succeed setLeads/setNotifications calls, in both clearDemoData() and
+ * loadDemoData() — preserving the "abort before touching the next entity"
+ * discipline even though not every entity this hook touches can fail the
+ * same way anymore. leads and notifications are the only two entities
+ * still on the synchronous local-state path (see lib/scopedStorage.ts) —
+ * clients/documents/tasks/quotes/policies all go through a real
+ * repository now, and family_members has never been on it at all.
  */
 export function useDemoData() {
   const scope = useAccessScope();
   const { clients, loadDemoClients, clearDemoClients } = useClients();
   const { leads, setLeads } = useLeads();
   const { quotes, loadDemoQuotes, clearDemoQuotes } = useQuotes();
-  const { policies, setPolicies } = usePolicies();
+  const { policies, loadDemoPolicies, clearDemoPolicies } = usePolicies();
   const { tasks, loadDemoTasks, clearDemoTasks } = useTasks();
   const { documents, loadDemoDocuments, clearDemoDocuments } = useDocuments();
   const { notifications, setNotifications } = useNotifications();
@@ -59,6 +62,9 @@ export function useDemoData() {
     const clearedQuotes = await clearDemoQuotes();
     if (!clearedQuotes.ok) return clearedQuotes;
 
+    const clearedPolicies = await clearDemoPolicies();
+    if (!clearedPolicies.ok) return clearedPolicies;
+
     // family_members has no is_demo tag and no dedicated clear RPC — in
     // `supabase` mode, Postgres's own `on delete cascade` already removed
     // these rows the instant their parent demo client was deleted above.
@@ -74,7 +80,6 @@ export function useDemoData() {
     }
 
     setLeads((current) => current.filter((lead) => !lead.isDemo));
-    setPolicies((current) => current.filter((policy) => !policy.isDemo));
     setNotifications((current) => current.filter((notification) => !notification.isDemo));
 
     return { ok: true, data: undefined };
@@ -83,11 +88,11 @@ export function useDemoData() {
     clearDemoDocuments,
     clearDemoTasks,
     clearDemoQuotes,
+    clearDemoPolicies,
     scope.backend,
     familyMembers,
     deleteFamilyMember,
     setLeads,
-    setPolicies,
     setNotifications,
   ]);
 
@@ -151,6 +156,16 @@ export function useDemoData() {
     const loadedQuotes = await loadDemoQuotes(quotesToLoad);
     if (!loadedQuotes.ok) return loadedQuotes;
 
+    // Same NOT NULL / no-admin-default reasoning as tasks.assigned_to and
+    // quotes.producer_id above, applied to policies.producer_id
+    // (force_owner_policies()).
+    const policiesToLoad = currentUserId
+      ? demo.policies.map((policy) => ({ ...policy, assignedProducerId: currentUserId }))
+      : demo.policies;
+
+    const loadedPolicies = await loadDemoPolicies(policiesToLoad);
+    if (!loadedPolicies.ok) return loadedPolicies;
+
     // No batch-create endpoint for family_members (see
     // familyMembersRepository.ts) — created one at a time through the real
     // repository, same as clients go through loadDemoClients() rather than
@@ -162,7 +177,6 @@ export function useDemoData() {
     if (familyMemberFailure && !familyMemberFailure.ok) return familyMemberFailure;
 
     setLeads((current) => [...demo.leads, ...current]);
-    setPolicies((current) => [...demo.policies, ...current]);
     setNotifications((current) => [...demo.notifications, ...current]);
 
     return { ok: true, data: undefined };
@@ -172,10 +186,10 @@ export function useDemoData() {
     loadDemoDocuments,
     loadDemoTasks,
     loadDemoQuotes,
+    loadDemoPolicies,
     createFamilyMember,
     currentUserId,
     setLeads,
-    setPolicies,
     setNotifications,
   ]);
 

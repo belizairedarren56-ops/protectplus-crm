@@ -71,17 +71,15 @@ describe("generateDemoDataForClients", () => {
   });
 
   it("produces unique ids across every generated entity with a generator-assigned id", () => {
-    // documents, tasks, quotes, and family_members carry no numeric id of
-    // their own — all four are created through their real repository (see
-    // useDemoData.ts), which assigns the id, so there's nothing to check
-    // uniqueness against here.
+    // documents, tasks, quotes, policies, and family_members carry no
+    // numeric id of their own — all five are created through their real
+    // repository (see useDemoData.ts), which assigns the id, so there's
+    // nothing to check uniqueness against here. leads and notifications
+    // are the only two entities remaining on the generator-assigned-id
+    // path.
     const clients = resolveClients();
     const demo = generateDemoDataForClients(1, clients);
-    const allIds = [
-      ...demo.policies.map((p) => p.id),
-      ...demo.leads.map((l) => l.id),
-      ...demo.notifications.map((n) => n.id),
-    ];
+    const allIds = [...demo.leads.map((l) => l.id), ...demo.notifications.map((n) => n.id)];
 
     expect(new Set(allIds).size).toBe(allIds.length);
   });

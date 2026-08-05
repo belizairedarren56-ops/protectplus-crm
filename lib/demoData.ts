@@ -1,6 +1,7 @@
 import { CARRIERS, CLIENT_STATUSES, INSURANCE_TYPES, PRODUCERS } from "@/lib/constants";
 import type { NewDocumentInput } from "@/lib/repositories/documentsRepository";
 import type { NewFamilyMemberInput } from "@/lib/repositories/familyMembersRepository";
+import type { NewPolicyInput } from "@/lib/repositories/policiesRepository";
 import type { NewQuoteInput } from "@/lib/repositories/quotesRepository";
 import type { NewTaskInput } from "@/lib/repositories/tasksRepository";
 import { LEAD_STAGES, DOCUMENT_FOLDERS } from "@/types";
@@ -9,7 +10,6 @@ import type {
   InsuranceType,
   Lead,
   Notification,
-  Policy,
   PolicyStatus,
   Priority,
   QuoteStatus,
@@ -235,7 +235,10 @@ function policyStatusFor(rng: Rng, expirationIso: string): PolicyStatus {
 }
 
 export type DemoDataSet = {
-  policies: Policy[];
+  /** No numeric id of its own — policies is Supabase/repository-backed
+   * from Phase 3B on (see policiesRepository.ts), so the caller
+   * (useDemoData) creates each one through the real repository. */
+  policies: NewPolicyInput[];
   leads: Lead[];
   /** No numeric id of its own — quotes is Supabase/repository-backed from
    * Phase 3B on (see quotesRepository.ts), so the caller (useDemoData)
@@ -275,7 +278,7 @@ export function generateDemoDataForClients(startId: number, clients: Client[]): 
     return { policies: [], leads: [], quotes: [], tasks: [], documents: [], notifications: [], familyMembers: [] };
   }
 
-  const policies: Policy[] = Array.from({ length: 25 }, (_, index) => {
+  const policies: NewPolicyInput[] = Array.from({ length: 25 }, () => {
     const client = pick(rng, clients);
     const product = pick(rng, INSURANCE_TYPES);
     const carrier = pick(rng, CARRIERS);
@@ -283,7 +286,6 @@ export function generateDemoDataForClients(startId: number, clients: Client[]): 
     const expirationDate = isoDaysFromNow(randomInt(rng, -60, 300));
 
     return {
-      id: nextId + index,
       clientId: client.id,
       clientName: `${client.firstName} ${client.lastName}`,
       carrier,
@@ -293,7 +295,7 @@ export function generateDemoDataForClients(startId: number, clients: Client[]): 
       expirationDate,
       status: policyStatusFor(rng, expirationDate),
       premium: premiumForType(rng, product),
-      producer: pick(rng, PRODUCERS),
+      assignedProducerName: pick(rng, PRODUCERS),
       isDemo: true,
     };
   });

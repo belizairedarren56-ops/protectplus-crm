@@ -590,6 +590,8 @@ export type Database = {
           effective_date: string
           expiration_date: string
           id: string
+          is_demo: boolean
+          legacy_id: string | null
           policy_number: string
           premium: number
           producer_id: string
@@ -608,6 +610,8 @@ export type Database = {
           effective_date: string
           expiration_date: string
           id?: string
+          is_demo?: boolean
+          legacy_id?: string | null
           policy_number: string
           premium: number
           producer_id: string
@@ -626,6 +630,8 @@ export type Database = {
           effective_date?: string
           expiration_date?: string
           id?: string
+          is_demo?: boolean
+          legacy_id?: string | null
           policy_number?: string
           premium?: number
           producer_id?: string
@@ -914,6 +920,7 @@ export type Database = {
       }
       clear_agency_demo_clients: { Args: never; Returns: number }
       clear_agency_demo_documents: { Args: never; Returns: number }
+      clear_agency_demo_policies: { Args: never; Returns: number }
       clear_agency_demo_quotes: { Args: never; Returns: number }
       clear_agency_demo_tasks: { Args: never; Returns: number }
       current_agency_id: { Args: never; Returns: string }

@@ -14,13 +14,14 @@ import type { Policy, PolicyStatus } from "@/types";
 const POLICY_STATUSES: PolicyStatus[] = ["Active", "Renewal Due", "Cancelled", "Expired"];
 
 export default function PoliciesPage() {
-  const { policies, setPolicies, policiesLoaded } = usePolicies();
+  const { policies, policiesLoaded, isError, error, createPolicy, updatePolicy, deletePolicy } = usePolicies();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [editingPolicy, setEditingPolicy] = useState<Policy | null | undefined>(undefined);
   // See app/quotes/page.tsx for why this exists — forces PolicyModal to
   // remount on every open so a cancelled draft never survives to the next one.
   const [modalSession, setModalSession] = useState(0);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   function openNewPolicy() {
     setModalSession((session) => session + 1);
@@ -43,18 +44,11 @@ export default function PoliciesPage() {
     return matchesQuery && matchesStatus;
   });
 
-  function savePolicy(policy: Policy) {
-    setPolicies((current) => {
-      const exists = current.some((item) => item.id === policy.id);
-      return exists
-        ? current.map((item) => (item.id === policy.id ? policy : item))
-        : [policy, ...current];
-    });
-  }
-
-  function deletePolicy(id: number) {
+  async function deletePolicyWithConfirm(id: string) {
     if (!window.confirm("Delete this policy?")) return;
-    setPolicies((current) => current.filter((item) => item.id !== id));
+    setActionError(null);
+    const result = await deletePolicy(id);
+    if (!result.ok) setActionError(result.error.message);
   }
 
   const columns: TableColumn<Policy>[] = [
@@ -103,7 +97,7 @@ export default function PoliciesPage() {
     {
       key: "producer",
       header: "Producer",
-      render: (policy) => <span className="text-gray-300">{policy.producer}</span>,
+      render: (policy) => <span className="text-gray-300">{policy.assignedProducerName ?? "—"}</span>,
     },
     {
       key: "actions",
@@ -113,7 +107,7 @@ export default function PoliciesPage() {
           <Button size="sm" variant="secondary" onClick={() => openEditPolicy(policy)}>
             Edit
           </Button>
-          <Button size="sm" variant="danger" onClick={() => deletePolicy(policy.id)}>
+          <Button size="sm" variant="danger" onClick={() => deletePolicyWithConfirm(policy.id)}>
             Delete
           </Button>
         </div>
@@ -157,8 +151,18 @@ export default function PoliciesPage() {
         </select>
       </div>
 
+      {actionError && (
+        <p role="alert" className="mt-3 text-sm text-red-400">
+          {actionError}
+        </p>
+      )}
+
       <div className="mt-6">
-        {!policiesLoaded ? (
+        {isError ? (
+          <div className="rounded-2xl border border-red-500/40 bg-red-500/10 px-6 py-16 text-center text-red-300">
+            Could not load policies{error ? `: ${error.message}` : "."}
+          </div>
+        ) : !policiesLoaded ? (
           <div className="rounded-2xl border border-yellow-500/20 bg-black/75 px-6 py-16 text-center text-gray-500">
             Loading policies...
           </div>
@@ -176,7 +180,8 @@ export default function PoliciesPage() {
         key={modalSession}
         open={editingPolicy !== undefined}
         onClose={() => setEditingPolicy(undefined)}
-        onSave={savePolicy}
+        onCreate={createPolicy}
+        onUpdate={updatePolicy}
         policy={editingPolicy}
       />
     </div>
