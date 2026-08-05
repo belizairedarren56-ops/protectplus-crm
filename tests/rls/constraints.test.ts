@@ -118,3 +118,40 @@ describe("data-integrity constraints", () => {
     expect(error?.message).toMatch(/null value|not-null constraint/i);
   });
 });
+
+// Phase 3B: client_notes.note_type — a PARTIAL unique index, not a blanket
+// one-note-per-client rule. Inserted directly via raw SQL (service role,
+// bypassing upsert_client_profile_note() on purpose) so these prove the
+// database constraint itself, not the RPC's own ownership check.
+describe("client_notes.note_type — uniqueness applies only to 'profile' notes", () => {
+  it("rejects a second 'profile'-type note for the same client", async () => {
+    const first = await admin.from("client_notes").insert({
+      agency_id: agencyId,
+      client_id: clientId,
+      note_type: "profile",
+      body: "First profile note",
+    });
+    expect(first.error).toBeNull();
+
+    const second = await admin.from("client_notes").insert({
+      agency_id: agencyId,
+      client_id: clientId,
+      note_type: "profile",
+      body: "Second profile note — should collide",
+    });
+    expect(second.error).not.toBeNull();
+    expect(second.error?.message).toMatch(/duplicate key|unique constraint/i);
+  });
+
+  it("allows unlimited 'timeline'-type notes for the same client", async () => {
+    for (const body of ["Timeline note 1", "Timeline note 2", "Timeline note 3"]) {
+      const { error } = await admin.from("client_notes").insert({
+        agency_id: agencyId,
+        client_id: clientId,
+        note_type: "timeline",
+        body,
+      });
+      expect(error).toBeNull();
+    }
+  });
+});

@@ -135,6 +135,7 @@ export type Database = {
           created_at: string
           created_by: string | null
           id: string
+          note_type: Database["public"]["Enums"]["client_note_type"]
           updated_at: string
           updated_by: string | null
         }
@@ -145,6 +146,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           id?: string
+          note_type?: Database["public"]["Enums"]["client_note_type"]
           updated_at?: string
           updated_by?: string | null
         }
@@ -155,6 +157,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           id?: string
+          note_type?: Database["public"]["Enums"]["client_note_type"]
           updated_at?: string
           updated_by?: string | null
         }
@@ -892,8 +895,29 @@ export type Database = {
       current_agency_id: { Args: never; Returns: string }
       is_admin: { Args: never; Returns: boolean }
       owns_or_admin: { Args: { owner: string }; Returns: boolean }
+      upsert_client_profile_note: {
+        Args: { p_body: string; p_client_id: string }
+        Returns: {
+          agency_id: string
+          body: string
+          client_id: string
+          created_at: string
+          created_by: string | null
+          id: string
+          note_type: Database["public"]["Enums"]["client_note_type"]
+          updated_at: string
+          updated_by: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "client_notes"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
     }
     Enums: {
+      client_note_type: "profile" | "timeline"
       client_status: "New Lead" | "Active" | "Prospect" | "Inactive" | "Lost"
       document_folder:
         | "Applications"
@@ -1056,6 +1080,7 @@ export const Constants = {
   },
   public: {
     Enums: {
+      client_note_type: ["profile", "timeline"],
       client_status: ["New Lead", "Active", "Prospect", "Inactive", "Lost"],
       document_folder: [
         "Applications",
