@@ -718,6 +718,8 @@ export type Database = {
           created_by: string | null
           id: string
           insurance_type: Database["public"]["Enums"]["insurance_type"]
+          is_demo: boolean
+          legacy_id: string | null
           premium: number
           producer_id: string
           status: Database["public"]["Enums"]["quote_status"]
@@ -734,6 +736,8 @@ export type Database = {
           created_by?: string | null
           id?: string
           insurance_type: Database["public"]["Enums"]["insurance_type"]
+          is_demo?: boolean
+          legacy_id?: string | null
           premium: number
           producer_id: string
           status?: Database["public"]["Enums"]["quote_status"]
@@ -750,6 +754,8 @@ export type Database = {
           created_by?: string | null
           id?: string
           insurance_type?: Database["public"]["Enums"]["insurance_type"]
+          is_demo?: boolean
+          legacy_id?: string | null
           premium?: number
           producer_id?: string
           status?: Database["public"]["Enums"]["quote_status"]
@@ -908,6 +914,7 @@ export type Database = {
       }
       clear_agency_demo_clients: { Args: never; Returns: number }
       clear_agency_demo_documents: { Args: never; Returns: number }
+      clear_agency_demo_quotes: { Args: never; Returns: number }
       clear_agency_demo_tasks: { Args: never; Returns: number }
       current_agency_id: { Args: never; Returns: string }
       is_admin: { Args: never; Returns: boolean }

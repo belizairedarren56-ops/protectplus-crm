@@ -97,14 +97,18 @@ export type Lead = {
 export type QuoteStatus = "Draft" | "Sent" | "Accepted" | "Declined" | "Expired";
 
 export type Quote = {
-  id: number;
+  id: string;
   /** References Client.id — a string in both backends since Phase 3A. */
   clientId: string;
   clientName: string;
   carrier: string;
   premium: number;
   coverage: string;
-  producer: string;
+  /** Real `profiles.id`, `supabase` mode only — the actual RLS-enforced
+   * `producer_id` column. */
+  assignedProducerId?: string;
+  /** Denormalized display name, populated in both modes. */
+  assignedProducerName?: string;
   insuranceType: InsuranceType;
   status: QuoteStatus;
   createdAt: string;

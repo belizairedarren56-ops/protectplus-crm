@@ -89,6 +89,23 @@ describe("ensureLocalDataMigrated", () => {
     expect(tasks[0].assignedTo).toBeUndefined();
   });
 
+  it("Phase 3B: renames quotes' legacy producer field to assignedProducerName, and stringifies its own id", async () => {
+    seedLegacyFixture();
+    window.localStorage.setItem(
+      "protectplus-quotes",
+      JSON.stringify([{ id: 5, clientId: 1735689600000, clientName: "Jane Cooper", producer: "Jane Producer" }])
+    );
+
+    await ensureLocalDataMigrated();
+
+    const quotes = JSON.parse(window.localStorage.getItem("protectplus-quotes@v2")!);
+    expect(quotes[0].id).toBe("5");
+    expect(typeof quotes[0].id).toBe("string");
+    expect(quotes[0].clientId).toBe("1735689600000");
+    expect(quotes[0].assignedProducerName).toBe("Jane Producer");
+    expect(quotes[0].producer).toBeUndefined();
+  });
+
   it("(correction 4.1.3) includes notifications, copied via an identity transform", async () => {
     seedLegacyFixture();
 

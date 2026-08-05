@@ -1,6 +1,7 @@
 import { CARRIERS, CLIENT_STATUSES, INSURANCE_TYPES, PRODUCERS } from "@/lib/constants";
 import type { NewDocumentInput } from "@/lib/repositories/documentsRepository";
 import type { NewFamilyMemberInput } from "@/lib/repositories/familyMembersRepository";
+import type { NewQuoteInput } from "@/lib/repositories/quotesRepository";
 import type { NewTaskInput } from "@/lib/repositories/tasksRepository";
 import { LEAD_STAGES, DOCUMENT_FOLDERS } from "@/types";
 import type {
@@ -11,7 +12,6 @@ import type {
   Policy,
   PolicyStatus,
   Priority,
-  Quote,
   QuoteStatus,
 } from "@/types";
 
@@ -237,7 +237,10 @@ function policyStatusFor(rng: Rng, expirationIso: string): PolicyStatus {
 export type DemoDataSet = {
   policies: Policy[];
   leads: Lead[];
-  quotes: Quote[];
+  /** No numeric id of its own — quotes is Supabase/repository-backed from
+   * Phase 3B on (see quotesRepository.ts), so the caller (useDemoData)
+   * creates each one through the real repository. */
+  quotes: NewQuoteInput[];
   /** No numeric id of its own — tasks is Supabase/repository-backed from
    * Phase 3B on (see tasksRepository.ts), so the caller (useDemoData)
    * creates each one through the real repository. */
@@ -317,18 +320,17 @@ export function generateDemoDataForClients(startId: number, clients: Client[]): 
   });
   nextId += leads.length;
 
-  const quotes: Quote[] = Array.from({ length: 15 }, (_, index) => {
+  const quotes: NewQuoteInput[] = Array.from({ length: 15 }, () => {
     const client = pick(rng, clients);
     const insuranceType = pick(rng, INSURANCE_TYPES);
 
     return {
-      id: nextId + index,
       clientId: client.id,
       clientName: `${client.firstName} ${client.lastName}`,
       carrier: pick(rng, CARRIERS),
       premium: premiumForType(rng, insuranceType),
       coverage: coverageForType(insuranceType),
-      producer: pick(rng, PRODUCERS),
+      assignedProducerName: pick(rng, PRODUCERS),
       insuranceType,
       status: pick(rng, [
         "Draft",
@@ -337,7 +339,6 @@ export function generateDemoDataForClients(startId: number, clients: Client[]): 
         "Declined",
         "Expired",
       ] satisfies QuoteStatus[]),
-      createdAt: isoDaysFromNow(-randomInt(rng, 0, 60)),
       isDemo: true,
     };
   });

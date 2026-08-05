@@ -102,24 +102,25 @@ function readLegacyStrict(entity: LegacyEntityName): Result<unknown[], DataBacke
 
 // Entities whose OWN id becomes a string, not just their clientId
 // references — grows as each entity's Phase 3B slice lands (Document.id,
-// Task.id today; Quote/Policy.id join this list when their own slices
-// change their type from number to string). Leads stays off this list —
+// Task.id, Quote.id today; Policy.id joins this list when its own slice
+// changes its type from number to string). Leads stays off this list —
 // Lead.id remains a number until Phase 3C migrates leads — so this must
 // never grow ahead of an entity's actual type change, or that entity's
 // still-untouched UI (numeric id comparisons, etc.) would silently break.
-const ENTITIES_WITH_STRING_ID: LegacyEntityName[] = ["documents", "tasks"];
+const ENTITIES_WITH_STRING_ID: LegacyEntityName[] = ["documents", "tasks", "quotes"];
 
 // Entities whose pre-Phase-3B shape had a plain-text producer/assignee
 // field, since renamed to a `*Name` field matching the entity's real
 // ownership column (assignedToName for tasks — deliberately not
-// "assignedProducer", matching Task.assignedToId's own naming; quotes and
-// policies get their own entries here when their slices rename `producer`
-// to `assignedProducerName`). Maps the OLD field name to the NEW one so a
-// pre-existing browser's stored assignment isn't silently orphaned by the
-// rename — same failure mode the "clients" branch below already guards
-// against for its own producer -> assignedProducerName rename.
+// "assignedProducer", matching Task.assignedToId's own naming;
+// assignedProducerName for quotes/policies, matching Client's Phase 3A
+// precedent). Maps the OLD field name to the NEW one so a pre-existing
+// browser's stored assignment isn't silently orphaned by the rename — same
+// failure mode the "clients" branch below already guards against for its
+// own producer -> assignedProducerName rename.
 const ASSIGNEE_FIELD_RENAMES: Partial<Record<LegacyEntityName, { from: string; to: string }>> = {
   tasks: { from: "assignedTo", to: "assignedToName" },
+  quotes: { from: "producer", to: "assignedProducerName" },
 };
 
 // clients: id -> String(id), and the legacy free-text `producer` field

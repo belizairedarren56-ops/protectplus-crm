@@ -4,8 +4,13 @@ import { FormEvent, ReactNode, useMemo, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Modal } from "@/components/ui/Modal";
+import { useAccessScope } from "@/hooks/useAccessScope";
+import { useAgencyProducers } from "@/hooks/useAgencyProducers";
 import { useClients } from "@/hooks/useClients";
+import type { DataBackendError } from "@/lib/dataMode";
 import { CARRIERS, INSURANCE_TYPES, PRODUCERS } from "@/lib/constants";
+import type { NewQuoteInput } from "@/lib/repositories/quotesRepository";
+import type { Result } from "@/lib/result";
 import type { InsuranceType, Quote, QuoteStatus } from "@/types";
 
 const FIELD_CLASSES =
@@ -16,11 +21,19 @@ const QUOTE_STATUSES: QuoteStatus[] = ["Draft", "Sent", "Accepted", "Declined", 
 type QuoteModalProps = {
   open: boolean;
   onClose: () => void;
-  onSave: (quote: Quote) => void;
+  onCreate: (input: NewQuoteInput) => Promise<Result<Quote, DataBackendError>>;
+  onUpdate: (id: string, patch: Partial<NewQuoteInput>) => Promise<Result<Quote, DataBackendError>>;
   quote?: Quote | null;
 };
 
-export function QuoteModal({ open, onClose, onSave, quote }: QuoteModalProps) {
+export function QuoteModal({ open, onClose, onCreate, onUpdate, quote }: QuoteModalProps) {
+  const scope = useAccessScope();
+  const isSupabase = scope.backend === "supabase";
+  const isAdmin = scope.status === "ready" && isSupabase && scope.role === "admin";
+  const currentUserId = scope.status === "ready" && isSupabase ? scope.userId : "";
+  // Only fires for an admin in supabase mode — see useAgencyProducers().
+  const producersQuery = useAgencyProducers();
+
   const { clients, isError: clientsErrored } = useClients();
 
   // Archived clients can't be picked for a *new* quote, but an existing quote
@@ -43,7 +56,8 @@ export function QuoteModal({ open, onClose, onSave, quote }: QuoteModalProps) {
         carrier: quote.carrier,
         premium: quote.premium,
         coverage: quote.coverage,
-        producer: quote.producer,
+        assignedProducerName: quote.assignedProducerName ?? PRODUCERS[0],
+        assignedProducerId: quote.assignedProducerId ?? currentUserId,
         insuranceType: quote.insuranceType,
         status: quote.status,
       };
@@ -56,11 +70,14 @@ export function QuoteModal({ open, onClose, onSave, quote }: QuoteModalProps) {
       carrier: CARRIERS[0],
       premium: 0,
       coverage: "",
-      producer: PRODUCERS[0],
+      assignedProducerName: PRODUCERS[0],
+      assignedProducerId: currentUserId,
       insuranceType: INSURANCE_TYPES[0],
       status: "Draft" as QuoteStatus,
     };
   });
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   // `formData.clientId` is only set once, at mount, when this modal is
   // opened fresh — but this modal's own `useClients()` instance hasn't
@@ -79,21 +96,45 @@ export function QuoteModal({ open, onClose, onSave, quote }: QuoteModalProps) {
     });
   }
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!effectiveClientId) return;
 
     const effectiveClient = selectableClients.find((item) => item.id === effectiveClientId);
+    const effectiveClientName = effectiveClient
+      ? `${effectiveClient.firstName} ${effectiveClient.lastName}`
+      : formData.clientName;
 
-    onSave({
-      id: quote?.id ?? Date.now(),
-      createdAt: quote?.createdAt ?? new Date().toISOString(),
-      ...formData,
+    // producer_id is NOT NULL with no server-side default for an admin
+    // caller (force_owner_quotes() only forces it for non-admins) — an
+    // admin must always send a real id; a producer omits it entirely and
+    // lets the trigger fill in auth.uid(), same as TaskModal's producer path.
+    const assignee = isSupabase
+      ? isAdmin
+        ? { assignedProducerId: formData.assignedProducerId || currentUserId }
+        : {}
+      : { assignedProducerName: formData.assignedProducerName };
+
+    const input: NewQuoteInput = {
       clientId: effectiveClientId,
-      clientName: effectiveClient
-        ? `${effectiveClient.firstName} ${effectiveClient.lastName}`
-        : formData.clientName,
-    });
+      clientName: effectiveClientName,
+      carrier: formData.carrier,
+      premium: formData.premium,
+      coverage: formData.coverage,
+      insuranceType: formData.insuranceType,
+      status: formData.status,
+      ...assignee,
+    };
+
+    setSubmitting(true);
+    setError(null);
+    const result = quote ? await onUpdate(quote.id, input) : await onCreate(input);
+    setSubmitting(false);
+
+    if (!result.ok) {
+      setError(result.error.message);
+      return;
+    }
 
     onClose();
   }
@@ -202,15 +243,34 @@ export function QuoteModal({ open, onClose, onSave, quote }: QuoteModalProps) {
           </FormField>
 
           <FormField label="Producer">
-            <select
-              value={formData.producer}
-              onChange={(event) => setFormData({ ...formData, producer: event.target.value })}
-              className={FIELD_CLASSES}
-            >
-              {PRODUCERS.map((producer) => (
-                <option key={producer}>{producer}</option>
-              ))}
-            </select>
+            {!isSupabase ? (
+              <select
+                value={formData.assignedProducerName}
+                onChange={(event) => setFormData({ ...formData, assignedProducerName: event.target.value })}
+                className={FIELD_CLASSES}
+              >
+                {PRODUCERS.map((producer) => (
+                  <option key={producer}>{producer}</option>
+                ))}
+              </select>
+            ) : isAdmin ? (
+              <select
+                value={formData.assignedProducerId}
+                onChange={(event) => setFormData({ ...formData, assignedProducerId: event.target.value })}
+                disabled={producersQuery.isLoading}
+                className={`${FIELD_CLASSES} disabled:opacity-50`}
+              >
+                {(producersQuery.data ?? []).map((producer) => (
+                  <option key={producer.id} value={producer.id}>
+                    {producer.fullName}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <p className="w-full rounded-xl border border-gray-800 bg-black/50 px-4 py-3 text-gray-400">
+                Assigned to you
+              </p>
+            )}
           </FormField>
 
           <FormField label="Status">
@@ -228,11 +288,15 @@ export function QuoteModal({ open, onClose, onSave, quote }: QuoteModalProps) {
           </FormField>
         </div>
 
+        {error && <p role="alert" className="text-sm font-semibold text-red-400">{error}</p>}
+
         <div className="flex justify-end gap-3 pt-4">
-          <Button type="button" variant="secondary" onClick={onClose}>
+          <Button type="button" variant="secondary" onClick={onClose} disabled={submitting}>
             Cancel
           </Button>
-          <Button type="submit">{quote ? "Save Changes" : "Create Quote"}</Button>
+          <Button type="submit" disabled={submitting}>
+            {submitting ? "Saving..." : quote ? "Save Changes" : "Create Quote"}
+          </Button>
         </div>
       </form>
     </Modal>

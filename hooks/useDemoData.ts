@@ -36,7 +36,7 @@ export function useDemoData() {
   const scope = useAccessScope();
   const { clients, loadDemoClients, clearDemoClients } = useClients();
   const { leads, setLeads } = useLeads();
-  const { quotes, setQuotes } = useQuotes();
+  const { quotes, loadDemoQuotes, clearDemoQuotes } = useQuotes();
   const { policies, setPolicies } = usePolicies();
   const { tasks, loadDemoTasks, clearDemoTasks } = useTasks();
   const { documents, loadDemoDocuments, clearDemoDocuments } = useDocuments();
@@ -56,6 +56,9 @@ export function useDemoData() {
     const clearedTasks = await clearDemoTasks();
     if (!clearedTasks.ok) return clearedTasks;
 
+    const clearedQuotes = await clearDemoQuotes();
+    if (!clearedQuotes.ok) return clearedQuotes;
+
     // family_members has no is_demo tag and no dedicated clear RPC — in
     // `supabase` mode, Postgres's own `on delete cascade` already removed
     // these rows the instant their parent demo client was deleted above.
@@ -71,7 +74,6 @@ export function useDemoData() {
     }
 
     setLeads((current) => current.filter((lead) => !lead.isDemo));
-    setQuotes((current) => current.filter((quote) => !quote.isDemo));
     setPolicies((current) => current.filter((policy) => !policy.isDemo));
     setNotifications((current) => current.filter((notification) => !notification.isDemo));
 
@@ -80,11 +82,11 @@ export function useDemoData() {
     clearDemoClients,
     clearDemoDocuments,
     clearDemoTasks,
+    clearDemoQuotes,
     scope.backend,
     familyMembers,
     deleteFamilyMember,
     setLeads,
-    setQuotes,
     setPolicies,
     setNotifications,
   ]);
@@ -140,6 +142,15 @@ export function useDemoData() {
     const loadedTasks = await loadDemoTasks(tasksToLoad);
     if (!loadedTasks.ok) return loadedTasks;
 
+    // Same NOT NULL / no-admin-default reasoning as tasks.assigned_to
+    // above, applied to quotes.producer_id (force_owner_quotes()).
+    const quotesToLoad = currentUserId
+      ? demo.quotes.map((quote) => ({ ...quote, assignedProducerId: currentUserId }))
+      : demo.quotes;
+
+    const loadedQuotes = await loadDemoQuotes(quotesToLoad);
+    if (!loadedQuotes.ok) return loadedQuotes;
+
     // No batch-create endpoint for family_members (see
     // familyMembersRepository.ts) — created one at a time through the real
     // repository, same as clients go through loadDemoClients() rather than
@@ -151,7 +162,6 @@ export function useDemoData() {
     if (familyMemberFailure && !familyMemberFailure.ok) return familyMemberFailure;
 
     setLeads((current) => [...demo.leads, ...current]);
-    setQuotes((current) => [...demo.quotes, ...current]);
     setPolicies((current) => [...demo.policies, ...current]);
     setNotifications((current) => [...demo.notifications, ...current]);
 
@@ -161,10 +171,10 @@ export function useDemoData() {
     loadDemoClients,
     loadDemoDocuments,
     loadDemoTasks,
+    loadDemoQuotes,
     createFamilyMember,
     currentUserId,
     setLeads,
-    setQuotes,
     setPolicies,
     setNotifications,
   ]);
