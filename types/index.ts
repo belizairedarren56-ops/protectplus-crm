@@ -132,10 +132,15 @@ export type Policy = {
 export type TaskStatus = "Open" | "Complete";
 
 export type Task = {
-  id: number;
+  id: string;
   title: string;
   description?: string;
-  assignedTo: string;
+  /** Real `profiles.id`, `supabase` mode only — the actual RLS-enforced
+   * `assigned_to` column. Deliberately not "assignedProducer": a task can
+   * be assigned to an admin, not only a producer. */
+  assignedToId?: string;
+  /** Denormalized display name, populated in both modes. */
+  assignedToName?: string;
   priority: Priority;
   dueDate: string;
   status: TaskStatus;

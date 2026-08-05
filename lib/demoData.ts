@@ -1,6 +1,7 @@
 import { CARRIERS, CLIENT_STATUSES, INSURANCE_TYPES, PRODUCERS } from "@/lib/constants";
 import type { NewDocumentInput } from "@/lib/repositories/documentsRepository";
 import type { NewFamilyMemberInput } from "@/lib/repositories/familyMembersRepository";
+import type { NewTaskInput } from "@/lib/repositories/tasksRepository";
 import { LEAD_STAGES, DOCUMENT_FOLDERS } from "@/types";
 import type {
   Client,
@@ -12,7 +13,6 @@ import type {
   Priority,
   Quote,
   QuoteStatus,
-  Task,
 } from "@/types";
 
 // Pure generator functions only — nothing in this file touches localStorage,
@@ -238,7 +238,10 @@ export type DemoDataSet = {
   policies: Policy[];
   leads: Lead[];
   quotes: Quote[];
-  tasks: Task[];
+  /** No numeric id of its own — tasks is Supabase/repository-backed from
+   * Phase 3B on (see tasksRepository.ts), so the caller (useDemoData)
+   * creates each one through the real repository. */
+  tasks: NewTaskInput[];
   /** No numeric id of its own — documents is Supabase/repository-backed
    * from Phase 3B on (see documentsRepository.ts), so the caller
    * (useDemoData) creates each one through the real repository. */
@@ -340,15 +343,14 @@ export function generateDemoDataForClients(startId: number, clients: Client[]): 
   });
   nextId += quotes.length;
 
-  const tasks: Task[] = Array.from({ length: 30 }, (_, index) => {
+  const tasks: NewTaskInput[] = Array.from({ length: 30 }, () => {
     const client = rng() > 0.3 ? pick(rng, clients) : null;
     const dueDate = isoDaysFromNow(randomInt(rng, -10, 30));
     const status = rng() > 0.65 ? "Complete" : "Open";
 
     return {
-      id: nextId + index,
       title: pick(rng, TASK_TITLES),
-      assignedTo: pick(rng, PRODUCERS),
+      assignedToName: pick(rng, PRODUCERS),
       priority: pick(rng, ["Low", "Medium", "High"] satisfies Priority[]),
       dueDate,
       status,

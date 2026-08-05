@@ -101,13 +101,26 @@ function readLegacyStrict(entity: LegacyEntityName): Result<unknown[], DataBacke
 }
 
 // Entities whose OWN id becomes a string, not just their clientId
-// references — grows as each entity's Phase 3B slice lands (Document.id
-// today; Task/Quote/Policy.id join this list when their own slices change
-// their type from number to string). Leads stays off this list — Lead.id
-// remains a number until Phase 3C migrates leads — so this must never grow
-// ahead of an entity's actual type change, or that entity's still-untouched
-// UI (numeric id comparisons, etc.) would silently break.
-const ENTITIES_WITH_STRING_ID: LegacyEntityName[] = ["documents"];
+// references — grows as each entity's Phase 3B slice lands (Document.id,
+// Task.id today; Quote/Policy.id join this list when their own slices
+// change their type from number to string). Leads stays off this list —
+// Lead.id remains a number until Phase 3C migrates leads — so this must
+// never grow ahead of an entity's actual type change, or that entity's
+// still-untouched UI (numeric id comparisons, etc.) would silently break.
+const ENTITIES_WITH_STRING_ID: LegacyEntityName[] = ["documents", "tasks"];
+
+// Entities whose pre-Phase-3B shape had a plain-text producer/assignee
+// field, since renamed to a `*Name` field matching the entity's real
+// ownership column (assignedToName for tasks — deliberately not
+// "assignedProducer", matching Task.assignedToId's own naming; quotes and
+// policies get their own entries here when their slices rename `producer`
+// to `assignedProducerName`). Maps the OLD field name to the NEW one so a
+// pre-existing browser's stored assignment isn't silently orphaned by the
+// rename — same failure mode the "clients" branch below already guards
+// against for its own producer -> assignedProducerName rename.
+const ASSIGNEE_FIELD_RENAMES: Partial<Record<LegacyEntityName, { from: string; to: string }>> = {
+  tasks: { from: "assignedTo", to: "assignedToName" },
+};
 
 // clients: id -> String(id), and the legacy free-text `producer` field
 // (pre-Phase-3A shape) renamed to assignedProducerName — the field every
@@ -141,6 +154,7 @@ function transform(entity: LegacyEntityName, legacy: unknown[]): unknown[] {
   }
 
   const stringifyOwnId = ENTITIES_WITH_STRING_ID.includes(entity);
+  const rename = ASSIGNEE_FIELD_RENAMES[entity];
   return legacy.map((raw) => {
     const record = raw as { id?: number | string; clientId?: number | string; [key: string]: unknown };
     const next: Record<string, unknown> = { ...record };
@@ -149,6 +163,11 @@ function transform(entity: LegacyEntityName, legacy: unknown[]): unknown[] {
     }
     if (record.clientId !== undefined && record.clientId !== null) {
       next.clientId = String(record.clientId);
+    }
+    if (rename) {
+      const oldValue = next[rename.from];
+      delete next[rename.from];
+      if (next[rename.to] === undefined) next[rename.to] = oldValue;
     }
     return next;
   });

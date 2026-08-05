@@ -32,9 +32,9 @@ const dependentPolicy: Policy = {
 };
 
 const dependentTask: Task = {
-  id: 200,
+  id: "200",
   title: "Follow up",
-  assignedTo: "Darren Belizaire",
+  assignedToName: "Darren Belizaire",
   priority: "Medium",
   dueDate: new Date().toISOString(),
   status: "Open",

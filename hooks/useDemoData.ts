@@ -27,10 +27,10 @@ import type { Result } from "@/lib/result";
  *
  * Every failure-capable step (anything that's a real repository/RPC call,
  * not a synchronous local-state write) runs BEFORE the guaranteed-to-
- * succeed setLeads/setQuotes/setPolicies/setTasks/setNotifications calls,
- * in both clearDemoData() and loadDemoData() — preserving the "abort
- * before touching the next entity" discipline even though not every entity
- * this hook touches can fail the same way anymore.
+ * succeed setLeads/setQuotes/setPolicies/setNotifications calls, in both
+ * clearDemoData() and loadDemoData() — preserving the "abort before
+ * touching the next entity" discipline even though not every entity this
+ * hook touches can fail the same way anymore.
  */
 export function useDemoData() {
   const scope = useAccessScope();
@@ -38,12 +38,13 @@ export function useDemoData() {
   const { leads, setLeads } = useLeads();
   const { quotes, setQuotes } = useQuotes();
   const { policies, setPolicies } = usePolicies();
-  const { tasks, setTasks } = useTasks();
+  const { tasks, loadDemoTasks, clearDemoTasks } = useTasks();
   const { documents, loadDemoDocuments, clearDemoDocuments } = useDocuments();
   const { notifications, setNotifications } = useNotifications();
   const { familyMembers, createFamilyMember, deleteFamilyMember } = useFamilyMembers();
 
   const isAdmin = scope.status === "ready" && (scope.backend === "demo" || scope.role === "admin");
+  const currentUserId = scope.status === "ready" && scope.backend === "supabase" ? scope.userId : null;
 
   const clearDemoData = useCallback(async (): Promise<Result<void, DataBackendError>> => {
     const cleared = await clearDemoClients();
@@ -51,6 +52,9 @@ export function useDemoData() {
 
     const clearedDocuments = await clearDemoDocuments();
     if (!clearedDocuments.ok) return clearedDocuments;
+
+    const clearedTasks = await clearDemoTasks();
+    if (!clearedTasks.ok) return clearedTasks;
 
     // family_members has no is_demo tag and no dedicated clear RPC — in
     // `supabase` mode, Postgres's own `on delete cascade` already removed
@@ -69,20 +73,19 @@ export function useDemoData() {
     setLeads((current) => current.filter((lead) => !lead.isDemo));
     setQuotes((current) => current.filter((quote) => !quote.isDemo));
     setPolicies((current) => current.filter((policy) => !policy.isDemo));
-    setTasks((current) => current.filter((task) => !task.isDemo));
     setNotifications((current) => current.filter((notification) => !notification.isDemo));
 
     return { ok: true, data: undefined };
   }, [
     clearDemoClients,
     clearDemoDocuments,
+    clearDemoTasks,
     scope.backend,
     familyMembers,
     deleteFamilyMember,
     setLeads,
     setQuotes,
     setPolicies,
-    setTasks,
     setNotifications,
   ]);
 
@@ -122,6 +125,21 @@ export function useDemoData() {
     const loadedDocuments = await loadDemoDocuments(demo.documents);
     if (!loadedDocuments.ok) return loadedDocuments;
 
+    // tasks.assigned_to is NOT NULL with no server-side default for an
+    // admin caller (force_owner_tasks() only forces it for non-admins — see
+    // tasksRepository.ts), and the generator has no real profile id to
+    // assign from (assignedToName is a display-only string picked from the
+    // PRODUCERS name list, not a resolvable id). In `supabase` mode, every
+    // generated demo task is assigned to the admin performing this load;
+    // `demo` mode has no such column constraint, so assignedToName alone is
+    // enough there, unchanged.
+    const tasksToLoad = currentUserId
+      ? demo.tasks.map((task) => ({ ...task, assignedToId: currentUserId }))
+      : demo.tasks;
+
+    const loadedTasks = await loadDemoTasks(tasksToLoad);
+    if (!loadedTasks.ok) return loadedTasks;
+
     // No batch-create endpoint for family_members (see
     // familyMembersRepository.ts) — created one at a time through the real
     // repository, same as clients go through loadDemoClients() rather than
@@ -135,7 +153,6 @@ export function useDemoData() {
     setLeads((current) => [...demo.leads, ...current]);
     setQuotes((current) => [...demo.quotes, ...current]);
     setPolicies((current) => [...demo.policies, ...current]);
-    setTasks((current) => [...demo.tasks, ...current]);
     setNotifications((current) => [...demo.notifications, ...current]);
 
     return { ok: true, data: undefined };
@@ -143,11 +160,12 @@ export function useDemoData() {
     clearDemoData,
     loadDemoClients,
     loadDemoDocuments,
+    loadDemoTasks,
     createFamilyMember,
+    currentUserId,
     setLeads,
     setQuotes,
     setPolicies,
-    setTasks,
     setNotifications,
   ]);
 

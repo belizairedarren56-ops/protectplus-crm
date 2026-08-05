@@ -73,6 +73,22 @@ describe("ensureLocalDataMigrated", () => {
     expect(typeof leads[0].id).toBe("number");
   });
 
+  it("Phase 3B: renames tasks' legacy assignedTo field to assignedToName, and stringifies its own id", async () => {
+    seedLegacyFixture();
+    window.localStorage.setItem(
+      "protectplus-tasks",
+      JSON.stringify([{ id: 9, title: "Call client", assignedTo: "Jane Producer" }])
+    );
+
+    await ensureLocalDataMigrated();
+
+    const tasks = JSON.parse(window.localStorage.getItem("protectplus-tasks@v2")!);
+    expect(tasks[0].id).toBe("9");
+    expect(typeof tasks[0].id).toBe("string");
+    expect(tasks[0].assignedToName).toBe("Jane Producer");
+    expect(tasks[0].assignedTo).toBeUndefined();
+  });
+
   it("(correction 4.1.3) includes notifications, copied via an identity transform", async () => {
     seedLegacyFixture();
 
