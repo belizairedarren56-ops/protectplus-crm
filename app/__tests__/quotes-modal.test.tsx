@@ -55,7 +55,7 @@ describe("Quotes page — modal state and client linkage", () => {
 
     let storedQuotes: Quote[] = [];
     await waitFor(() => {
-      storedQuotes = getItem<Quote[]>(`${STORAGE_KEYS.quotes}@v2`, []);
+      storedQuotes = getItem<Quote[]>(`${STORAGE_KEYS.quotes}@v3`, []);
       expect(storedQuotes).toHaveLength(1);
     });
     expect(storedQuotes[0].clientId).toBe(client.id);

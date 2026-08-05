@@ -80,13 +80,19 @@ export const LEAD_STAGES: LeadStage[] = [
 ];
 
 export type Lead = {
-  id: number;
+  /** A string in both backends since Phase 3C: a real Supabase UUID in
+   * `supabase` mode, `String(Date.now())` in `demo` mode. */
+  id: string;
   /** References Client.id — a string in both backends since Phase 3A. */
   clientId?: string;
   clientName: string;
   insuranceType: InsuranceType;
   stage: LeadStage;
-  producer: string;
+  /** Real `profiles.id`, `supabase` mode only — the actual RLS-enforced
+   * `producer_id` column. */
+  assignedProducerId?: string;
+  /** Denormalized display name, populated in both modes. */
+  assignedProducerName?: string;
   priority: Priority;
   lastContact: string;
   phone?: string;

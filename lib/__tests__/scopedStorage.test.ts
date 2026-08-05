@@ -66,7 +66,7 @@ describe("resolveStorageKey (correction 4.1.1)", () => {
       this: Storage,
       key: string
     ) {
-      if (key === "protectplus-leads@v2") return JSON.stringify([{ corrupted: true }]);
+      if (key === "protectplus-leads@v2") return JSON.stringify([{ corrupted: true }]); // corrupt v1 -> v2's write so the v2 -> v3 step's read-back verification fails
       return originalGetItem.call(this, key);
     });
 
@@ -88,7 +88,7 @@ describe("resolveStorageKey (correction 4.1.1)", () => {
     await ensureLocalDataMigrated();
 
     const result = await resolveStorageKey("leads", DEMO_SCOPE);
-    expect(result).toEqual({ ok: true, data: "protectplus-leads@v2" });
+    expect(result).toEqual({ ok: true, data: "protectplus-leads@v3" });
   });
 
   it("resolves a fully scoped namespace key in supabase mode, unrelated to versioning", async () => {
