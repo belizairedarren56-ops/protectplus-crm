@@ -5,8 +5,8 @@ tasks, a document center, reports, and settings. Built with Next.js (App
 Router) and TypeScript.
 
 **Current data layer: clients, quotes, policies, tasks, documents, client
-notes, and family members are all backed by Supabase in `supabase` mode
-(real auth, real Row Level Security); only leads and notifications are still
+notes, family members, and leads are all backed by Supabase in `supabase`
+mode (real auth, real Row Level Security); only notifications is still
 `localStorage`, single browser.** Which mode is active is an explicit choice
 — `NEXT_PUBLIC_DATA_BACKEND=demo|supabase` (see `.env.example`) — not
 auto-detected from whether Supabase is configured. Do not enter real client,
@@ -54,7 +54,7 @@ components/
   clients/ leads/ quotes/ policies/ tasks/   Feature-specific components
 hooks/                One hook per entity (useClients, useQuotes, ...).
                        Supabase-backed entities: real repository + TanStack
-                       Query. leads/notifications: thin wrappers around
+                       Query. notifications: thin wrapper around
                        useLocalStorageList
 lib/
   storage.ts           localStorage get/set helpers + key registry
@@ -66,10 +66,10 @@ e2e/                   Playwright specs
 ```
 
 **Data flow — Supabase-backed entities (`Client`, `Quote`, `Policy`, `Task`,
-`Document`, family members, client notes — both modes go through one hook
-each).** `hooks/useClients()` and its six siblings always call the same
-TanStack Query hooks regardless of backend; only the *repository* each one
-queries through is selected by a plain function
+`Document`, family members, client notes, `Lead` — both modes go through one
+hook each).** `hooks/useClients()` and its seven siblings always call the
+same TanStack Query hooks regardless of backend; only the *repository* each
+one queries through is selected by a plain function
 (`lib/repositories/<entity>Repository.ts`'s factory in `supabase` mode,
 `lib/repositories/demo<Entity>Repository.ts` — hook-free wrappers around
 `localStorage` — in `demo` mode). Both backends share one query cache per
@@ -78,32 +78,41 @@ every consumer reads from the same source of truth instead of an independent
 local copy. Repository methods return a typed `Result<T, Error>` rather than
 throwing; `lib/result.ts`'s `unwrap()` is the one place that gets translated
 into the throw/reject TanStack Query actually needs. Every list-shaped
-entity (quotes/policies/tasks/documents/family members) fetches its whole
-RLS-scoped list once per scope and lets consumers filter client-side (e.g.
-the client detail page's tabs); `useClientNotes(clientId)` is the one
-exception, keyed per-client since it's only ever read one client at a time.
-`client_notes` writes go through a dedicated `upsert_client_profile_note()`
-RPC rather than a plain `.upsert()`, because Postgres can't target a partial
-unique index (the mechanism that allows exactly one "profile" note per
-client while leaving room for a future many-per-client note timeline)
-through PostgREST's generic upsert. `family_members` has no owner column of
-its own — visibility follows the parent client's assigned producer — and no
-`is_demo` tag, since it cascade-deletes with its parent client instead.
+entity (quotes/policies/tasks/documents/family members/leads) fetches its
+whole RLS-scoped list once per scope and lets consumers filter client-side
+(e.g. the client detail page's tabs, or leads' Kanban stage columns);
+`useClientNotes(clientId)` is the one exception, keyed per-client since it's
+only ever read one client at a time. `client_notes` writes go through a
+dedicated `upsert_client_profile_note()` RPC rather than a plain
+`.upsert()`, because Postgres can't target a partial unique index (the
+mechanism that allows exactly one "profile" note per client while leaving
+room for a future many-per-client note timeline) through PostgREST's
+generic upsert. `family_members` has no owner column of its own —
+visibility follows the parent client's assigned producer — and no `is_demo`
+tag, since it cascade-deletes with its parent client instead. `useLeads()`'s
+`updateLead` mutation is optimistic (the Kanban drag needs to feel instant),
+scoped per-lead and guarded by a per-lead sequence number so an older,
+overlapping mutation's failure can never clobber a newer mutation's
+optimistic or already-settled state — every other entity's mutations are
+plain `onSuccess`-based cache writes, since nothing else has a
+latency-sensitive interaction.
 
-**Data flow — `leads` and `notifications`.** Still `localStorage`-backed,
-one hook per entity in `hooks/`, thin wrappers around `useLocalStorageList`.
-In `demo` mode the storage key is the same static name it's always been; in
-`supabase` mode it's scoped by the full signed-in identity
-(`lib/scopedStorage.ts`) so two different people on the same shared browser
-never read or write each other's still-local data, even though every other
-entity is already protected by real Supabase RLS. A one-time, versioned,
-crash-recoverable migration (`lib/localDataMigrations.ts`) converts a
-browser's pre-existing numeric-id data to the current string-id shape the
-first time it loads; the original data is never mutated, only read. This
-same migration also carries `quotes`/`policies`/`tasks`/`documents` forward
-for `demo`-mode users (their own id, and any legacy free-text
-producer/assignee field, converts the same way), since `demo` mode never
-touches Supabase for any entity.
+**Data flow — `notifications`.** Still `localStorage`-backed, a thin wrapper
+around `useLocalStorageList` in `hooks/useNotifications.ts`. In `demo` mode
+the storage key is the same static name it's always been; in `supabase` mode
+it's scoped by the full signed-in identity (`lib/scopedStorage.ts`) so two
+different people on the same shared browser never read or write each
+other's still-local data, even though every other entity is already
+protected by real Supabase RLS. A versioned, crash-recoverable, multi-step
+migration (`lib/localDataMigrations.ts`) converts a browser's pre-existing
+data forward through each schema version in order (currently v1 → v2 → v3);
+every step sources from the *previous* step's own versioned output — never
+re-deriving from the original legacy keys once a later version is already
+active — so a step added by a later phase (e.g. Phase 3C's v2 → v3, which
+carried `leads` forward) never discards data written under an
+already-active version. The original legacy keys, and every intermediate
+version's keys, are never mutated once written, only read forward into the
+next version.
 
 **Demo data vs. real data.** `lib/demoData.ts` exports pure generator
 functions — they return data, they never touch storage. `hooks/useDemoData.ts`
@@ -131,22 +140,27 @@ policies, quotes, tasks, notes, or documents. Restoring clears the flag.
 ## Roadmap
 
 Phase 1 (UI, `localStorage`), Phase 2 (Supabase schema/RLS/auth
-foundation), Phase 3A (`clients` onto Supabase), and **Phase 3B (this
-phase — `policies`, `quotes`, `tasks`, `documents`, `client_notes`, and
-`family_members` onto Supabase)** are complete. Every entity that has real
-auth-backed ownership now has real Row Level Security enforcing it:
-producers only see their own assigned clients/quotes/policies/tasks (and,
-via the parent client, their own family members and notes), admins see the
-whole agency. Only `leads` (Phase 3C) and `notifications` (Phase 3D) remain
-`localStorage`, followed by agency settings (Phase 3E) — see the Phase 3
-planning doc. Known, deliberate limitations of the current phase:
+foundation), Phase 3A (`clients` onto Supabase), Phase 3B (`policies`,
+`quotes`, `tasks`, `documents`, `client_notes`, and `family_members` onto
+Supabase), and **Phase 3C (this phase — `leads` and the Kanban pipeline UI
+onto Supabase)** are complete. Every entity that has real auth-backed
+ownership now has real Row Level Security enforcing it: producers only see
+their own assigned clients/quotes/policies/tasks/leads (and, via the parent
+client, their own family members and notes), admins see the whole agency.
+Only `notifications` (Phase 3D) remains `localStorage`, followed by agency
+settings (Phase 3E) — see the Phase 3 planning doc. Known, deliberate
+limitations of the current phase:
 
 - `NEXT_PUBLIC_DATA_BACKEND=demo` (the default outside production) behaves
   exactly like before — no Supabase involved at all for anyone who hasn't
   explicitly opted into `supabase` mode.
-- `leads`/`notifications` remain `localStorage`, scoped per signed-in
-  identity in `supabase` mode (see Architecture above) but not yet backed by
-  a real database or shared between users.
+- `notifications` remains `localStorage`, scoped per signed-in identity in
+  `supabase` mode (see Architecture above) but not yet backed by a real
+  database or shared between users.
+- No client picker or edit-lead UI in `AddLeadModal` — leads are created
+  unlinked-to-a-client by default (matching `TaskModal`'s precedent) and
+  stage changes only happen via the Kanban drag; a full lead-edit flow is a
+  future phase.
 - No permanent-delete UI for clients (or any other entity) — archive/restore
   only for clients, hard delete for quotes/policies/tasks/documents (admin-
   only for quotes/policies/documents, owner-or-admin for tasks, matching

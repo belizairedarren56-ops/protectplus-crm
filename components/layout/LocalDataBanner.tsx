@@ -4,10 +4,13 @@ import { getDataBackend } from "@/lib/dataMode";
 
 // Entities not yet migrated off localStorage — one entry removed per future
 // Phase 3 slice. Phase 3B migrated policies, quotes, tasks, documents,
-// client notes, and family members, leaving only leads (Phase 3C) and
+// client notes, and family members; Phase 3C migrated leads, leaving only
 // notifications (Phase 3D), so the banner's copy doesn't need another
-// wording review every phase, just this list trimmed.
-const NOT_YET_MIGRATED = ["lead", "and notification"];
+// wording review every phase, just this list trimmed. No baked-in "and" —
+// notYetMigratedList()'s single-item branch returns the array's one
+// element verbatim, so a pre-joined "and notification" would render "And
+// notification" after capitalize() once this became the sole entry.
+const NOT_YET_MIGRATED = ["notification"];
 
 function notYetMigratedList(): string {
   if (NOT_YET_MIGRATED.length === 1) return NOT_YET_MIGRATED[0];
