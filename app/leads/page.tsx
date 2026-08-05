@@ -8,21 +8,16 @@ import { useLeads } from "@/hooks/useLeads";
 import type { LeadStage } from "@/types";
 
 export default function LeadsPage() {
-  const { leads, setLeads, leadsLoaded } = useLeads();
+  const { leads, leadsLoaded, isError, error, createLead, updateLead } = useLeads();
   const [showAddLead, setShowAddLead] = useState(false);
+  const [stageChangeError, setStageChangeError] = useState<string | null>(null);
 
-  function handleStageChange(leadId: number, stage: LeadStage) {
-    setLeads((current) =>
-      current.map((lead) =>
-        lead.id === leadId
-          ? {
-              ...lead,
-              stage,
-              lastContact: lead.stage === stage ? lead.lastContact : new Date().toISOString(),
-            }
-          : lead
-      )
-    );
+  async function handleStageChange(leadId: string, stage: LeadStage) {
+    const current = leads.find((lead) => lead.id === leadId);
+    if (!current || current.stage === stage) return; // no-op: dropped into its own column
+    setStageChangeError(null);
+    const result = await updateLead(leadId, { stage, lastContact: new Date().toISOString() });
+    if (!result.ok) setStageChangeError(result.error.message);
   }
 
   return (
@@ -41,8 +36,18 @@ export default function LeadsPage() {
         <Button onClick={() => setShowAddLead(true)}>+ New Lead</Button>
       </div>
 
+      {stageChangeError && (
+        <p role="alert" className="mt-3 text-sm text-red-400">
+          {stageChangeError}
+        </p>
+      )}
+
       <div className="mt-8">
-        {!leadsLoaded ? (
+        {isError ? (
+          <div className="rounded-2xl border border-red-500/40 bg-red-500/10 px-6 py-16 text-center text-red-300">
+            Could not load leads{error ? `: ${error.message}` : "."}
+          </div>
+        ) : !leadsLoaded ? (
           <div className="rounded-2xl border border-yellow-500/20 bg-black/75 px-6 py-16 text-center text-gray-500">
             Loading leads...
           </div>
@@ -51,11 +56,7 @@ export default function LeadsPage() {
         )}
       </div>
 
-      <AddLeadModal
-        open={showAddLead}
-        onClose={() => setShowAddLead(false)}
-        onAdd={(lead) => setLeads((current) => [lead, ...current])}
-      />
+      <AddLeadModal open={showAddLead} onClose={() => setShowAddLead(false)} onCreate={createLead} />
     </div>
   );
 }

@@ -7,7 +7,7 @@ import type { Lead, LeadStage } from "@/types";
 
 type KanbanBoardProps = {
   leads: Lead[];
-  onStageChange: (leadId: number, stage: LeadStage) => void;
+  onStageChange: (leadId: string, stage: LeadStage) => void;
 };
 
 export function KanbanBoard({ leads, onStageChange }: KanbanBoardProps) {
@@ -20,7 +20,7 @@ export function KanbanBoard({ leads, onStageChange }: KanbanBoardProps) {
     if (!over) return;
 
     const stage = over.id as LeadStage;
-    const leadId = Number(active.id);
+    const leadId = active.id as string;
     onStageChange(leadId, stage);
   }
 
