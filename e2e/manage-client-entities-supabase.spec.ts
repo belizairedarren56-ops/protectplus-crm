@@ -56,7 +56,7 @@ test.describe("client entities — supabase mode", () => {
     await page.getByLabel("Client").selectOption({ label: clientName });
     const policyNumber = `E2E-POL-${Date.now()}`;
     await page.getByPlaceholder("SF-1234567").fill(policyNumber);
-    await page.getByRole("button", { name: "Add Policy" }).click();
+    await page.getByRole("button", { name: "Add Policy", exact: true }).click();
     await expect(page.getByText(policyNumber)).toBeVisible();
 
     await page.reload();
