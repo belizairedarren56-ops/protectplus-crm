@@ -22,6 +22,16 @@ function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
+// A new policy's default term: today through one year out. Matters beyond
+// just a sensible default — the database rejects effective_date >=
+// expiration_date (CHECK constraint), and defaulting both dates to today
+// would violate that on every create until the user manually fixed one.
+function oneYearFromTodayIso(): string {
+  const date = new Date();
+  date.setFullYear(date.getFullYear() + 1);
+  return date.toISOString().slice(0, 10);
+}
+
 type PolicyModalProps = {
   open: boolean;
   onClose: () => void;
@@ -75,7 +85,7 @@ export function PolicyModal({ open, onClose, onCreate, onUpdate, policy }: Polic
       policyNumber: "",
       product: INSURANCE_TYPES[0],
       effectiveDate: todayIso(),
-      expirationDate: todayIso(),
+      expirationDate: oneYearFromTodayIso(),
       status: "Active" as PolicyStatus,
       premium: 0,
       assignedProducerName: PRODUCERS[0],
@@ -90,6 +100,14 @@ export function PolicyModal({ open, onClose, onCreate, onUpdate, policy }: Polic
   // hasn't necessarily loaded yet at the first render after mount.
   const effectiveClientId = formData.clientId || selectableClients[0]?.id || "";
 
+  // Mirrors the database's own effective_date < expiration_date CHECK
+  // constraint client-side, so a bad range is caught here instead of
+  // round-tripping to Supabase for a rejection. ISO "YYYY-MM-DD" strings
+  // compare correctly with plain string comparison.
+  const dateRangeInvalid = Boolean(
+    formData.effectiveDate && formData.expirationDate && formData.expirationDate <= formData.effectiveDate
+  );
+
   function handleClientChange(clientId: string) {
     const client = selectableClients.find((item) => item.id === clientId);
     setFormData({
@@ -102,6 +120,10 @@ export function PolicyModal({ open, onClose, onCreate, onUpdate, policy }: Polic
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!effectiveClientId) return;
+    // The inline error near the date fields already explains why; nothing
+    // to submit until the range is fixed. Checked here too (not just via
+    // the disabled submit button below) so this can never be bypassed.
+    if (dateRangeInvalid) return;
 
     const effectiveClient = selectableClients.find((item) => item.id === effectiveClientId);
     const effectiveClientName = effectiveClient
@@ -256,10 +278,18 @@ export function PolicyModal({ open, onClose, onCreate, onUpdate, policy }: Polic
               type="date"
               value={formData.expirationDate}
               onChange={(event) => setFormData({ ...formData, expirationDate: event.target.value })}
+              aria-invalid={dateRangeInvalid}
+              aria-describedby={dateRangeInvalid ? "policy-date-range-error" : undefined}
               className={FIELD_CLASSES}
             />
           </FormField>
         </div>
+
+        {dateRangeInvalid && (
+          <p id="policy-date-range-error" role="alert" className="text-sm font-semibold text-red-400">
+            Expiration date must be after the effective date.
+          </p>
+        )}
 
         <div className="grid gap-5 md:grid-cols-3">
           <FormField label="Premium ($/yr)">
@@ -325,7 +355,7 @@ export function PolicyModal({ open, onClose, onCreate, onUpdate, policy }: Polic
           <Button type="button" variant="secondary" onClick={onClose} disabled={submitting}>
             Cancel
           </Button>
-          <Button type="submit" disabled={submitting}>
+          <Button type="submit" disabled={submitting || dateRangeInvalid}>
             {submitting ? "Saving..." : policy ? "Save Changes" : "Add Policy"}
           </Button>
         </div>
