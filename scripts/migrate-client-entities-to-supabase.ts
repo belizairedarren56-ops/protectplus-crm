@@ -250,16 +250,21 @@ async function main() {
   // a real assignee. A missing name is reported here; a present but
   // unresolvable name is already reported by resolveProducerId() itself,
   // so this doesn't duplicate that failure.
-  function requireProducerId(label: string, index: number, name: string | undefined): string | undefined {
+  function requireProducerId(
+    label: string,
+    index: number,
+    name: string | undefined,
+    noun: string
+  ): string | undefined {
     if (!name) {
-      failures.push(`${label} ${index}: requires a producer/assignee (none was provided).`);
+      failures.push(`${label} ${index}: requires ${noun} (none was provided).`);
     }
     return resolveProducerId(label, index, name);
   }
 
   const resolvedPolicies = (file.policies ?? []).map((record, index) => {
     const clientId = resolveClientId("Policy", index, record.clientId);
-    const producerId = requireProducerId("Policy", index, producerName(record));
+    const producerId = requireProducerId("Policy", index, producerName(record), "a producer/assignee");
     return {
       legacyId: String(record.id),
       clientId,
@@ -277,7 +282,7 @@ async function main() {
 
   const resolvedQuotes = (file.quotes ?? []).map((record, index) => {
     const clientId = resolveClientId("Quote", index, record.clientId);
-    const producerId = requireProducerId("Quote", index, producerName(record));
+    const producerId = requireProducerId("Quote", index, producerName(record), "a producer/assignee");
     return {
       legacyId: String(record.id),
       clientId,
@@ -294,7 +299,7 @@ async function main() {
   const resolvedTasks = (file.tasks ?? []).map((record, index) => {
     const clientId =
       record.clientId !== undefined ? resolveClientId("Task", index, record.clientId) : undefined;
-    const assignedTo = requireProducerId("Task", index, record.assignedToName ?? record.assignedTo);
+    const assignedTo = requireProducerId("Task", index, record.assignedToName ?? record.assignedTo, "an assignee");
     return {
       legacyId: String(record.id),
       clientId,
