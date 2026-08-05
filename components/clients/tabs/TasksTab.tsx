@@ -14,7 +14,7 @@ export function TasksTab({ tasks }: { tasks: Task[] }) {
     {
       key: "assignedTo",
       header: "Assigned To",
-      render: (task) => <span className="text-gray-300">{task.assignedTo}</span>,
+      render: (task) => <span className="text-gray-300">{task.assignedToName ?? "—"}</span>,
     },
     {
       key: "priority",

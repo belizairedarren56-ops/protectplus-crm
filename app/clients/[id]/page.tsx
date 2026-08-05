@@ -16,6 +16,7 @@ import { QuotesTab } from "@/components/clients/tabs/QuotesTab";
 import { TasksTab } from "@/components/clients/tabs/TasksTab";
 import { useClients } from "@/hooks/useClients";
 import { useDocuments } from "@/hooks/useDocuments";
+import { useFamilyMembers } from "@/hooks/useFamilyMembers";
 import { usePolicies } from "@/hooks/usePolicies";
 import { useQuotes } from "@/hooks/useQuotes";
 import { useTasks } from "@/hooks/useTasks";
@@ -43,12 +44,14 @@ export default function ClientProfilePage() {
   const { quotes } = useQuotes();
   const { tasks } = useTasks();
   const { documents } = useDocuments();
+  const { familyMembers } = useFamilyMembers();
 
   const client = clients.find((item) => item.id === clientId) ?? null;
   const clientPolicies = policies.filter((policy) => policy.clientId === clientId);
   const clientQuotes = quotes.filter((quote) => quote.clientId === clientId);
   const clientTasks = tasks.filter((task) => task.clientId === clientId);
   const clientDocuments = documents.filter((document) => document.clientId === clientId);
+  const clientFamilyMembers = familyMembers.filter((member) => member.clientId === clientId);
 
   if (isError) {
     return (
@@ -148,7 +151,7 @@ export default function ClientProfilePage() {
             tasks={clientTasks}
           />
         )}
-        {activeTab === "Family Members" && <FamilyTab client={client} />}
+        {activeTab === "Family Members" && <FamilyTab familyMembers={clientFamilyMembers} />}
       </div>
     </div>
   );

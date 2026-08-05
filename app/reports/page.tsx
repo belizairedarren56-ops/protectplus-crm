@@ -37,7 +37,8 @@ export default function ReportsPage() {
 
   const producerTotals = new Map<string, number>();
   policies.forEach((policy) => {
-    producerTotals.set(policy.producer, (producerTotals.get(policy.producer) ?? 0) + policy.premium);
+    const producerName = policy.assignedProducerName ?? "Unassigned";
+    producerTotals.set(producerName, (producerTotals.get(producerName) ?? 0) + policy.premium);
   });
   const producerRankings = Array.from(producerTotals.entries())
     .map(([producer, premium]) => ({ producer, premium }))

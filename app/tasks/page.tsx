@@ -12,13 +12,14 @@ import type { Task } from "@/types";
 type ViewMode = "list" | "calendar";
 
 export default function TasksPage() {
-  const { tasks, setTasks, tasksLoaded } = useTasks();
+  const { tasks, tasksLoaded, isError, error, createTask, updateTask, deleteTask } = useTasks();
   const [view, setView] = useState<ViewMode>("list");
   const [showOpenOnly, setShowOpenOnly] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null | undefined>(undefined);
   // See app/quotes/page.tsx for why this exists — forces TaskModal to remount
   // on every open so a cancelled draft never survives to the next one.
   const [modalSession, setModalSession] = useState(0);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const visibleTasks = showOpenOnly ? tasks.filter((task) => task.status === "Open") : tasks;
 
@@ -32,24 +33,19 @@ export default function TasksPage() {
     setEditingTask(task);
   }
 
-  function saveTask(task: Task) {
-    setTasks((current) => {
-      const exists = current.some((item) => item.id === task.id);
-      return exists ? current.map((item) => (item.id === task.id ? task : item)) : [task, ...current];
-    });
-  }
-
-  function deleteTask(id: number) {
+  async function deleteTaskWithConfirm(id: string) {
     if (!window.confirm("Delete this task?")) return;
-    setTasks((current) => current.filter((item) => item.id !== id));
+    setActionError(null);
+    const result = await deleteTask(id);
+    if (!result.ok) setActionError(result.error.message);
   }
 
-  function toggleComplete(id: number) {
-    setTasks((current) =>
-      current.map((task) =>
-        task.id === id ? { ...task, status: task.status === "Complete" ? "Open" : "Complete" } : task
-      )
-    );
+  async function toggleComplete(id: string) {
+    const target = tasks.find((task) => task.id === id);
+    if (!target) return;
+    setActionError(null);
+    const result = await updateTask(id, { status: target.status === "Complete" ? "Open" : "Complete" });
+    if (!result.ok) setActionError(result.error.message);
   }
 
   return (
@@ -101,8 +97,18 @@ export default function TasksPage() {
         )}
       </div>
 
+      {actionError && (
+        <p role="alert" className="mt-3 text-sm text-red-400">
+          {actionError}
+        </p>
+      )}
+
       <div className="mt-6">
-        {!tasksLoaded ? (
+        {isError ? (
+          <div className="rounded-2xl border border-red-500/40 bg-red-500/10 px-6 py-16 text-center text-red-300">
+            Could not load tasks{error ? `: ${error.message}` : "."}
+          </div>
+        ) : !tasksLoaded ? (
           <div className="rounded-2xl border border-yellow-500/20 bg-black/75 px-6 py-16 text-center text-gray-500">
             Loading tasks...
           </div>
@@ -111,7 +117,7 @@ export default function TasksPage() {
             tasks={visibleTasks}
             onToggleComplete={toggleComplete}
             onEdit={openEditTask}
-            onDelete={deleteTask}
+            onDelete={deleteTaskWithConfirm}
           />
         ) : (
           <TaskCalendar tasks={visibleTasks} />
@@ -122,7 +128,8 @@ export default function TasksPage() {
         key={modalSession}
         open={editingTask !== undefined}
         onClose={() => setEditingTask(undefined)}
-        onSave={saveTask}
+        onCreate={createTask}
+        onUpdate={updateTask}
         task={editingTask}
       />
     </div>

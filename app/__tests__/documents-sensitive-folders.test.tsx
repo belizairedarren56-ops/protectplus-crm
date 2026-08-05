@@ -10,21 +10,21 @@ const ENV_KEY = "NEXT_PUBLIC_ENABLE_SENSITIVE_DOCUMENT_FOLDERS";
 
 const documents: Document[] = [
   {
-    id: 1,
+    id: "1",
     name: "license.jpg",
     folder: "Driver Licenses",
     uploadedAt: new Date().toISOString(),
     fileType: "jpg",
   },
   {
-    id: 2,
+    id: "2",
     name: "medical-form.pdf",
     folder: "Medical Documents",
     uploadedAt: new Date().toISOString(),
     fileType: "pdf",
   },
   {
-    id: 3,
+    id: "3",
     name: "application.pdf",
     folder: "Applications",
     uploadedAt: new Date().toISOString(),

@@ -21,7 +21,6 @@ function resolveClients(count = 50): Client[] {
     insuranceTypes: draft.insuranceTypes,
     createdAt: draft.createdAt,
     assignedProducerName: draft.assignedProducerName,
-    familyMembers: draft.familyMembers,
     isDemo: true,
   }));
 }
@@ -71,17 +70,16 @@ describe("generateDemoDataForClients", () => {
     }
   });
 
-  it("produces unique ids across every generated entity", () => {
+  it("produces unique ids across every generated entity with a generator-assigned id", () => {
+    // documents, tasks, quotes, policies, and family_members carry no
+    // numeric id of their own — all five are created through their real
+    // repository (see useDemoData.ts), which assigns the id, so there's
+    // nothing to check uniqueness against here. leads and notifications
+    // are the only two entities remaining on the generator-assigned-id
+    // path.
     const clients = resolveClients();
     const demo = generateDemoDataForClients(1, clients);
-    const allIds = [
-      ...demo.policies.map((p) => p.id),
-      ...demo.leads.map((l) => l.id),
-      ...demo.quotes.map((q) => q.id),
-      ...demo.tasks.map((t) => t.id),
-      ...demo.documents.map((d) => d.id),
-      ...demo.notifications.map((n) => n.id),
-    ];
+    const allIds = [...demo.leads.map((l) => l.id), ...demo.notifications.map((n) => n.id)];
 
     expect(new Set(allIds).size).toBe(allIds.length);
   });
@@ -94,5 +92,18 @@ describe("generateDemoDataForClients", () => {
     expect(demo.tasks).toHaveLength(0);
     expect(demo.documents).toHaveLength(0);
     expect(demo.notifications).toHaveLength(0);
+    expect(demo.familyMembers).toHaveLength(0);
+  });
+
+  it("every generated family member references a real, resolved client and has no id of its own", () => {
+    const clients = resolveClients();
+    const demo = generateDemoDataForClients(1, clients);
+    const clientIds = new Set(clients.map((client) => client.id));
+
+    expect(demo.familyMembers.length).toBeGreaterThan(0);
+    for (const member of demo.familyMembers) {
+      expect(clientIds.has(member.clientId)).toBe(true);
+      expect(member).not.toHaveProperty("id");
+    }
   });
 });

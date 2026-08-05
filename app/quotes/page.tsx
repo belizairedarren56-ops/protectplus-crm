@@ -12,7 +12,7 @@ import { formatCurrency, formatDate } from "@/lib/format";
 import type { Quote } from "@/types";
 
 export default function QuotesPage() {
-  const { quotes, setQuotes, quotesLoaded } = useQuotes();
+  const { quotes, quotesLoaded, isError, error, createQuote, updateQuote, deleteQuote } = useQuotes();
   const [search, setSearch] = useState("");
   const [editingQuote, setEditingQuote] = useState<Quote | null | undefined>(undefined);
   // Bumped every time the modal is opened (new or edit) so QuoteModal always
@@ -20,6 +20,7 @@ export default function QuotesPage() {
   // Quote" clicks (with a cancel in between) reuse the same component
   // instance and a cancelled draft survives into the next open.
   const [modalSession, setModalSession] = useState(0);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   function openNewQuote() {
     setModalSession((session) => session + 1);
@@ -37,18 +38,11 @@ export default function QuotesPage() {
     return `${quote.clientName} ${quote.carrier} ${quote.insuranceType}`.toLowerCase().includes(query);
   });
 
-  function saveQuote(quote: Quote) {
-    setQuotes((current) => {
-      const exists = current.some((item) => item.id === quote.id);
-      return exists
-        ? current.map((item) => (item.id === quote.id ? quote : item))
-        : [quote, ...current];
-    });
-  }
-
-  function deleteQuote(id: number) {
+  async function deleteQuoteWithConfirm(id: string) {
     if (!window.confirm("Delete this quote?")) return;
-    setQuotes((current) => current.filter((item) => item.id !== id));
+    setActionError(null);
+    const result = await deleteQuote(id);
+    if (!result.ok) setActionError(result.error.message);
   }
 
   const columns: TableColumn<Quote>[] = [
@@ -75,7 +69,7 @@ export default function QuotesPage() {
     {
       key: "producer",
       header: "Producer",
-      render: (quote) => <span className="text-gray-300">{quote.producer}</span>,
+      render: (quote) => <span className="text-gray-300">{quote.assignedProducerName ?? "—"}</span>,
     },
     {
       key: "premium",
@@ -100,7 +94,7 @@ export default function QuotesPage() {
           <Button size="sm" variant="secondary" onClick={() => openEditQuote(quote)}>
             Edit
           </Button>
-          <Button size="sm" variant="danger" onClick={() => deleteQuote(quote.id)}>
+          <Button size="sm" variant="danger" onClick={() => deleteQuoteWithConfirm(quote.id)}>
             Delete
           </Button>
         </div>
@@ -130,8 +124,18 @@ export default function QuotesPage() {
         />
       </div>
 
+      {actionError && (
+        <p role="alert" className="mt-3 text-sm text-red-400">
+          {actionError}
+        </p>
+      )}
+
       <div className="mt-6">
-        {!quotesLoaded ? (
+        {isError ? (
+          <div className="rounded-2xl border border-red-500/40 bg-red-500/10 px-6 py-16 text-center text-red-300">
+            Could not load quotes{error ? `: ${error.message}` : "."}
+          </div>
+        ) : !quotesLoaded ? (
           <div className="rounded-2xl border border-yellow-500/20 bg-black/75 px-6 py-16 text-center text-gray-500">
             Loading quotes...
           </div>
@@ -144,7 +148,8 @@ export default function QuotesPage() {
         key={modalSession}
         open={editingQuote !== undefined}
         onClose={() => setEditingQuote(undefined)}
-        onSave={saveQuote}
+        onCreate={createQuote}
+        onUpdate={updateQuote}
         quote={editingQuote}
       />
     </div>

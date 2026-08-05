@@ -1,18 +1,18 @@
 import { CARRIERS, CLIENT_STATUSES, INSURANCE_TYPES, PRODUCERS } from "@/lib/constants";
+import type { NewDocumentInput } from "@/lib/repositories/documentsRepository";
+import type { NewFamilyMemberInput } from "@/lib/repositories/familyMembersRepository";
+import type { NewPolicyInput } from "@/lib/repositories/policiesRepository";
+import type { NewQuoteInput } from "@/lib/repositories/quotesRepository";
+import type { NewTaskInput } from "@/lib/repositories/tasksRepository";
 import { LEAD_STAGES, DOCUMENT_FOLDERS } from "@/types";
 import type {
   Client,
-  Document,
-  FamilyMember,
   InsuranceType,
   Lead,
   Notification,
-  Policy,
   PolicyStatus,
   Priority,
-  Quote,
   QuoteStatus,
-  Task,
 } from "@/types";
 
 // Pure generator functions only — nothing in this file touches localStorage,
@@ -187,9 +187,6 @@ export type DemoClientDraft = {
   createdAt: string;
   /** demo-mode display only — the Supabase repository ignores this. */
   assignedProducerName: string;
-  /** demo-mode only — family_members isn't migrated this phase, so this is
-   * dropped entirely when generating for the `supabase` backend. */
-  familyMembers: FamilyMember[];
   isDemo: true;
 };
 
@@ -216,14 +213,6 @@ function generateClientDraft(rng: Rng): DemoClientDraft {
     insuranceTypes,
     createdAt: isoDaysFromNow(-randomInt(rng, 5, 700)),
     assignedProducerName: pick(rng, PRODUCERS),
-    familyMembers:
-      rng() > 0.5
-        ? pickMany(rng, FIRST_NAMES, randomInt(rng, 1, 2)).map((name, index) => ({
-            id: `demo-fam-${index}-${name}`,
-            name: `${name} ${lastName}`,
-            relationship: pick(rng, ["Spouse", "Child", "Parent"]),
-          }))
-        : [],
     isDemo: true,
   };
 }
@@ -246,12 +235,29 @@ function policyStatusFor(rng: Rng, expirationIso: string): PolicyStatus {
 }
 
 export type DemoDataSet = {
-  policies: Policy[];
+  /** No numeric id of its own — policies is Supabase/repository-backed
+   * from Phase 3B on (see policiesRepository.ts), so the caller
+   * (useDemoData) creates each one through the real repository. */
+  policies: NewPolicyInput[];
   leads: Lead[];
-  quotes: Quote[];
-  tasks: Task[];
-  documents: Document[];
+  /** No numeric id of its own — quotes is Supabase/repository-backed from
+   * Phase 3B on (see quotesRepository.ts), so the caller (useDemoData)
+   * creates each one through the real repository. */
+  quotes: NewQuoteInput[];
+  /** No numeric id of its own — tasks is Supabase/repository-backed from
+   * Phase 3B on (see tasksRepository.ts), so the caller (useDemoData)
+   * creates each one through the real repository. */
+  tasks: NewTaskInput[];
+  /** No numeric id of its own — documents is Supabase/repository-backed
+   * from Phase 3B on (see documentsRepository.ts), so the caller
+   * (useDemoData) creates each one through the real repository. */
+  documents: NewDocumentInput[];
   notifications: Notification[];
+  /** No numeric id of its own yet — family_members is Supabase/repository-
+   * backed from day one this phase (see familyMembersRepository.ts), so the
+   * caller (useDemoData) creates each one through the real repository,
+   * exactly like resolving client ids through createDemoBatch(). */
+  familyMembers: NewFamilyMemberInput[];
 };
 
 /**
@@ -260,16 +266,19 @@ export type DemoDataSet = {
  * (`String(Date.now())`-based) or by Postgres (real UUIDs, after
  * `clientsRepository.createDemoBatch()` returns). `startId` seeds these
  * entities' own numeric ids (unaffected by the client id-format change).
+ * `familyMembers` moved here from `generateClientDraft()` for the same
+ * reason: it needs a resolved `clientId` to reference, which doesn't exist
+ * until stage 1's client drafts have actually been created.
  */
 export function generateDemoDataForClients(startId: number, clients: Client[]): DemoDataSet {
   const rng = mulberry32(20260731);
   let nextId = startId;
 
   if (clients.length === 0) {
-    return { policies: [], leads: [], quotes: [], tasks: [], documents: [], notifications: [] };
+    return { policies: [], leads: [], quotes: [], tasks: [], documents: [], notifications: [], familyMembers: [] };
   }
 
-  const policies: Policy[] = Array.from({ length: 25 }, (_, index) => {
+  const policies: NewPolicyInput[] = Array.from({ length: 25 }, () => {
     const client = pick(rng, clients);
     const product = pick(rng, INSURANCE_TYPES);
     const carrier = pick(rng, CARRIERS);
@@ -277,7 +286,6 @@ export function generateDemoDataForClients(startId: number, clients: Client[]): 
     const expirationDate = isoDaysFromNow(randomInt(rng, -60, 300));
 
     return {
-      id: nextId + index,
       clientId: client.id,
       clientName: `${client.firstName} ${client.lastName}`,
       carrier,
@@ -287,7 +295,7 @@ export function generateDemoDataForClients(startId: number, clients: Client[]): 
       expirationDate,
       status: policyStatusFor(rng, expirationDate),
       premium: premiumForType(rng, product),
-      producer: pick(rng, PRODUCERS),
+      assignedProducerName: pick(rng, PRODUCERS),
       isDemo: true,
     };
   });
@@ -314,18 +322,17 @@ export function generateDemoDataForClients(startId: number, clients: Client[]): 
   });
   nextId += leads.length;
 
-  const quotes: Quote[] = Array.from({ length: 15 }, (_, index) => {
+  const quotes: NewQuoteInput[] = Array.from({ length: 15 }, () => {
     const client = pick(rng, clients);
     const insuranceType = pick(rng, INSURANCE_TYPES);
 
     return {
-      id: nextId + index,
       clientId: client.id,
       clientName: `${client.firstName} ${client.lastName}`,
       carrier: pick(rng, CARRIERS),
       premium: premiumForType(rng, insuranceType),
       coverage: coverageForType(insuranceType),
-      producer: pick(rng, PRODUCERS),
+      assignedProducerName: pick(rng, PRODUCERS),
       insuranceType,
       status: pick(rng, [
         "Draft",
@@ -334,21 +341,19 @@ export function generateDemoDataForClients(startId: number, clients: Client[]): 
         "Declined",
         "Expired",
       ] satisfies QuoteStatus[]),
-      createdAt: isoDaysFromNow(-randomInt(rng, 0, 60)),
       isDemo: true,
     };
   });
   nextId += quotes.length;
 
-  const tasks: Task[] = Array.from({ length: 30 }, (_, index) => {
+  const tasks: NewTaskInput[] = Array.from({ length: 30 }, () => {
     const client = rng() > 0.3 ? pick(rng, clients) : null;
     const dueDate = isoDaysFromNow(randomInt(rng, -10, 30));
     const status = rng() > 0.65 ? "Complete" : "Open";
 
     return {
-      id: nextId + index,
       title: pick(rng, TASK_TITLES),
-      assignedTo: pick(rng, PRODUCERS),
+      assignedToName: pick(rng, PRODUCERS),
       priority: pick(rng, ["Low", "Medium", "High"] satisfies Priority[]),
       dueDate,
       status,
@@ -359,8 +364,7 @@ export function generateDemoDataForClients(startId: number, clients: Client[]): 
   });
   nextId += tasks.length;
 
-  const documents: Document[] = [];
-  let docIndex = 0;
+  const documents: NewDocumentInput[] = [];
   const fileTypeByFolder: Record<string, string> = {
     Applications: "pdf",
     Declarations: "pdf",
@@ -378,16 +382,13 @@ export function generateDemoDataForClients(startId: number, clients: Client[]): 
       const fileType = fileTypeByFolder[folder];
 
       documents.push({
-        id: nextId + docIndex,
         name: `${client.lastName}_${folder.replace(/\s+/g, "")}_${i + 1}.${fileType}`,
         folder,
         clientId: client.id,
         clientName: `${client.firstName} ${client.lastName}`,
-        uploadedAt: isoDaysFromNow(-randomInt(rng, 0, 200)),
         fileType,
         isDemo: true,
       });
-      docIndex += 1;
     }
   }
   nextId += documents.length;
@@ -436,5 +437,18 @@ export function generateDemoDataForClients(startId: number, clients: Client[]): 
     },
   ];
 
-  return { policies, leads, quotes, tasks, documents, notifications };
+  // Roughly half of clients get 1-2 family members — same odds
+  // generateClientDraft() used to apply before this generation step moved
+  // here to reference a resolved clientId.
+  const familyMembers: NewFamilyMemberInput[] = clients.flatMap((client) =>
+    rng() > 0.5
+      ? pickMany(rng, FIRST_NAMES, randomInt(rng, 1, 2)).map((name) => ({
+          clientId: client.id,
+          name: `${name} ${client.lastName}`,
+          relationship: pick(rng, ["Spouse", "Child", "Parent"]),
+        }))
+      : []
+  );
+
+  return { policies, leads, quotes, tasks, documents, notifications, familyMembers };
 }

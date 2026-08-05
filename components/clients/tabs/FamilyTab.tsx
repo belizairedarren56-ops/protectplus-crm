@@ -1,10 +1,10 @@
 import { Avatar } from "@/components/ui/Avatar";
 import { Card } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
-import type { Client } from "@/types";
+import type { FamilyMember } from "@/types";
 
-export function FamilyTab({ client }: { client: Client }) {
-  const members = client.familyMembers ?? [];
+export function FamilyTab({ familyMembers }: { familyMembers: FamilyMember[] }) {
+  const members = familyMembers;
 
   if (members.length === 0) {
     return (

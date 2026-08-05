@@ -12,6 +12,8 @@ export type Priority = "Low" | "Medium" | "High";
 
 export type FamilyMember = {
   id: string;
+  /** References Client.id — a string in both backends since Phase 3A. */
+  clientId: string;
   name: string;
   relationship: string;
   dateOfBirth?: string;
@@ -37,7 +39,6 @@ export type Client = {
   policyNumber?: string;
   insuranceTypes?: InsuranceType[];
   createdAt?: string;
-  familyMembers?: FamilyMember[];
   /** Real `profiles.id`, `supabase` mode only — the actual RLS-enforced
    * ownership column. Absent in `demo` mode (no real profiles exist). */
   assignedProducerId?: string;
@@ -96,14 +97,18 @@ export type Lead = {
 export type QuoteStatus = "Draft" | "Sent" | "Accepted" | "Declined" | "Expired";
 
 export type Quote = {
-  id: number;
+  id: string;
   /** References Client.id — a string in both backends since Phase 3A. */
   clientId: string;
   clientName: string;
   carrier: string;
   premium: number;
   coverage: string;
-  producer: string;
+  /** Real `profiles.id`, `supabase` mode only — the actual RLS-enforced
+   * `producer_id` column. */
+  assignedProducerId?: string;
+  /** Denormalized display name, populated in both modes. */
+  assignedProducerName?: string;
   insuranceType: InsuranceType;
   status: QuoteStatus;
   createdAt: string;
@@ -113,7 +118,7 @@ export type Quote = {
 export type PolicyStatus = "Active" | "Renewal Due" | "Cancelled" | "Expired";
 
 export type Policy = {
-  id: number;
+  id: string;
   /** References Client.id — a string in both backends since Phase 3A. */
   clientId: string;
   clientName: string;
@@ -124,17 +129,26 @@ export type Policy = {
   expirationDate: string;
   status: PolicyStatus;
   premium: number;
-  producer: string;
+  /** Real `profiles.id`, `supabase` mode only — the actual RLS-enforced
+   * `producer_id` column. */
+  assignedProducerId?: string;
+  /** Denormalized display name, populated in both modes. */
+  assignedProducerName?: string;
   isDemo?: boolean;
 };
 
 export type TaskStatus = "Open" | "Complete";
 
 export type Task = {
-  id: number;
+  id: string;
   title: string;
   description?: string;
-  assignedTo: string;
+  /** Real `profiles.id`, `supabase` mode only — the actual RLS-enforced
+   * `assigned_to` column. Deliberately not "assignedProducer": a task can
+   * be assigned to an admin, not only a producer. */
+  assignedToId?: string;
+  /** Denormalized display name, populated in both modes. */
+  assignedToName?: string;
   priority: Priority;
   dueDate: string;
   status: TaskStatus;
@@ -164,7 +178,7 @@ export const DOCUMENT_FOLDERS: DocumentFolder[] = [
 ];
 
 export type Document = {
-  id: number;
+  id: string;
   name: string;
   folder: DocumentFolder;
   /** References Client.id — a string in both backends since Phase 3A. */
@@ -172,6 +186,8 @@ export type Document = {
   clientName?: string;
   uploadedAt: string;
   fileType: string;
+  /** `supabase` mode only — the agency this record belongs to. */
+  agencyId?: string;
   isDemo?: boolean;
 };
 

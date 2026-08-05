@@ -100,14 +100,38 @@ function readLegacyStrict(entity: LegacyEntityName): Result<unknown[], DataBacke
   return { ok: true, data: parsed };
 }
 
+// Entities whose OWN id becomes a string, not just their clientId
+// references — grows as each entity's Phase 3B slice lands. Every business
+// entity now on this list; leads stays off it — Lead.id remains a number
+// until Phase 3C migrates leads — so this must never grow ahead of an
+// entity's actual type change, or that entity's still-untouched UI
+// (numeric id comparisons, etc.) would silently break.
+const ENTITIES_WITH_STRING_ID: LegacyEntityName[] = ["documents", "tasks", "quotes", "policies"];
+
+// Entities whose pre-Phase-3B shape had a plain-text producer/assignee
+// field, since renamed to a `*Name` field matching the entity's real
+// ownership column (assignedToName for tasks — deliberately not
+// "assignedProducer", matching Task.assignedToId's own naming;
+// assignedProducerName for quotes/policies, matching Client's Phase 3A
+// precedent). Maps the OLD field name to the NEW one so a pre-existing
+// browser's stored assignment isn't silently orphaned by the rename — same
+// failure mode the "clients" branch below already guards against for its
+// own producer -> assignedProducerName rename.
+const ASSIGNEE_FIELD_RENAMES: Partial<Record<LegacyEntityName, { from: string; to: string }>> = {
+  tasks: { from: "assignedTo", to: "assignedToName" },
+  quotes: { from: "producer", to: "assignedProducerName" },
+  policies: { from: "producer", to: "assignedProducerName" },
+};
+
 // clients: id -> String(id), and the legacy free-text `producer` field
 // (pre-Phase-3A shape) renamed to assignedProducerName — the field every
 // current UI path actually reads. Without this rename, a browser's existing
 // producer assignment would silently become unreadable after migration:
 // still present in the raw stored JSON, but orphaned, since Client no longer
 // has a `producer` field at all. The five clientId-bearing entities:
-// clientId -> String(clientId), only when present (several are optional).
-// notifications: identity — nothing to convert, just copied into the
+// clientId -> String(clientId), only when present (several are optional),
+// and (for entities in ENTITIES_WITH_STRING_ID) their own id -> String(id)
+// too. notifications: identity — nothing to convert, just copied into the
 // versioned namespace.
 function transform(entity: LegacyEntityName, legacy: unknown[]): unknown[] {
   if (entity === "clients") {
@@ -129,10 +153,24 @@ function transform(entity: LegacyEntityName, legacy: unknown[]): unknown[] {
   if (entity === "notifications") {
     return legacy;
   }
+
+  const stringifyOwnId = ENTITIES_WITH_STRING_ID.includes(entity);
+  const rename = ASSIGNEE_FIELD_RENAMES[entity];
   return legacy.map((raw) => {
-    const record = raw as { clientId?: number | string; [key: string]: unknown };
-    if (record.clientId === undefined || record.clientId === null) return record;
-    return { ...record, clientId: String(record.clientId) };
+    const record = raw as { id?: number | string; clientId?: number | string; [key: string]: unknown };
+    const next: Record<string, unknown> = { ...record };
+    if (stringifyOwnId && record.id !== undefined && record.id !== null) {
+      next.id = String(record.id);
+    }
+    if (record.clientId !== undefined && record.clientId !== null) {
+      next.clientId = String(record.clientId);
+    }
+    if (rename) {
+      const oldValue = next[rename.from];
+      delete next[rename.from];
+      if (next[rename.to] === undefined) next[rename.to] = oldValue;
+    }
+    return next;
   });
 }
 

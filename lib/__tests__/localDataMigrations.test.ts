@@ -49,6 +49,80 @@ describe("ensureLocalDataMigrated", () => {
     expect(quotes[0].clientId).toBe(clients[0].id); // relationship still resolves after conversion
   });
 
+  it("Phase 3B: stringifies documents' own id (Supabase-backed), but leaves leads' own id a number (still local)", async () => {
+    seedLegacyFixture();
+    window.localStorage.setItem(
+      "protectplus-documents",
+      JSON.stringify([{ id: 42, name: "app.pdf", folder: "Applications" }])
+    );
+    window.localStorage.setItem(
+      "protectplus-leads",
+      JSON.stringify([{ id: 7, clientName: "Jane Cooper" }])
+    );
+
+    await ensureLocalDataMigrated();
+
+    const documents = JSON.parse(window.localStorage.getItem("protectplus-documents@v2")!);
+    const leads = JSON.parse(window.localStorage.getItem("protectplus-leads@v2")!);
+
+    expect(documents[0].id).toBe("42");
+    expect(typeof documents[0].id).toBe("string");
+    // leads isn't migrated until Phase 3C — its own id must stay a number,
+    // matching the still-unchanged Lead.id: number type.
+    expect(leads[0].id).toBe(7);
+    expect(typeof leads[0].id).toBe("number");
+  });
+
+  it("Phase 3B: renames tasks' legacy assignedTo field to assignedToName, and stringifies its own id", async () => {
+    seedLegacyFixture();
+    window.localStorage.setItem(
+      "protectplus-tasks",
+      JSON.stringify([{ id: 9, title: "Call client", assignedTo: "Jane Producer" }])
+    );
+
+    await ensureLocalDataMigrated();
+
+    const tasks = JSON.parse(window.localStorage.getItem("protectplus-tasks@v2")!);
+    expect(tasks[0].id).toBe("9");
+    expect(typeof tasks[0].id).toBe("string");
+    expect(tasks[0].assignedToName).toBe("Jane Producer");
+    expect(tasks[0].assignedTo).toBeUndefined();
+  });
+
+  it("Phase 3B: renames quotes' legacy producer field to assignedProducerName, and stringifies its own id", async () => {
+    seedLegacyFixture();
+    window.localStorage.setItem(
+      "protectplus-quotes",
+      JSON.stringify([{ id: 5, clientId: 1735689600000, clientName: "Jane Cooper", producer: "Jane Producer" }])
+    );
+
+    await ensureLocalDataMigrated();
+
+    const quotes = JSON.parse(window.localStorage.getItem("protectplus-quotes@v2")!);
+    expect(quotes[0].id).toBe("5");
+    expect(typeof quotes[0].id).toBe("string");
+    expect(quotes[0].clientId).toBe("1735689600000");
+    expect(quotes[0].assignedProducerName).toBe("Jane Producer");
+    expect(quotes[0].producer).toBeUndefined();
+  });
+
+  it("Phase 3B: renames policies' legacy producer field to assignedProducerName, and stringifies its own id", async () => {
+    seedLegacyFixture();
+    window.localStorage.setItem(
+      "protectplus-policies",
+      JSON.stringify([{ id: 3, clientId: 1735689600000, clientName: "Jane Cooper", producer: "Jane Producer" }])
+    );
+
+    await ensureLocalDataMigrated();
+
+    const policies = JSON.parse(window.localStorage.getItem("protectplus-policies@v2")!);
+    expect(policies[0].id).toBe("3");
+    expect(typeof policies[0].id).toBe("string");
+    expect(policies[0].clientId).toBe("1735689600000");
+    expect(policies[0].assignedProducerName).toBe("Jane Producer");
+    expect(policies[0].producer).toBeUndefined();
+  });
+
   it("(correction 4.1.3) includes notifications, copied via an identity transform", async () => {
     seedLegacyFixture();
 

@@ -135,6 +135,7 @@ export type Database = {
           created_at: string
           created_by: string | null
           id: string
+          note_type: Database["public"]["Enums"]["client_note_type"]
           updated_at: string
           updated_by: string | null
         }
@@ -145,6 +146,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           id?: string
+          note_type?: Database["public"]["Enums"]["client_note_type"]
           updated_at?: string
           updated_by?: string | null
         }
@@ -155,6 +157,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           id?: string
+          note_type?: Database["public"]["Enums"]["client_note_type"]
           updated_at?: string
           updated_by?: string | null
         }
@@ -302,6 +305,8 @@ export type Database = {
           file_type: string | null
           folder: Database["public"]["Enums"]["document_folder"]
           id: string
+          is_demo: boolean
+          legacy_id: string | null
           name: string
           storage_path: string | null
           updated_at: string
@@ -315,6 +320,8 @@ export type Database = {
           file_type?: string | null
           folder: Database["public"]["Enums"]["document_folder"]
           id?: string
+          is_demo?: boolean
+          legacy_id?: string | null
           name: string
           storage_path?: string | null
           updated_at?: string
@@ -328,6 +335,8 @@ export type Database = {
           file_type?: string | null
           folder?: Database["public"]["Enums"]["document_folder"]
           id?: string
+          is_demo?: boolean
+          legacy_id?: string | null
           name?: string
           storage_path?: string | null
           updated_at?: string
@@ -372,6 +381,7 @@ export type Database = {
           created_by: string | null
           date_of_birth: string | null
           id: string
+          legacy_id: string | null
           name: string
           relationship: string
           updated_at: string
@@ -384,6 +394,7 @@ export type Database = {
           created_by?: string | null
           date_of_birth?: string | null
           id?: string
+          legacy_id?: string | null
           name: string
           relationship: string
           updated_at?: string
@@ -396,6 +407,7 @@ export type Database = {
           created_by?: string | null
           date_of_birth?: string | null
           id?: string
+          legacy_id?: string | null
           name?: string
           relationship?: string
           updated_at?: string
@@ -578,6 +590,8 @@ export type Database = {
           effective_date: string
           expiration_date: string
           id: string
+          is_demo: boolean
+          legacy_id: string | null
           policy_number: string
           premium: number
           producer_id: string
@@ -596,6 +610,8 @@ export type Database = {
           effective_date: string
           expiration_date: string
           id?: string
+          is_demo?: boolean
+          legacy_id?: string | null
           policy_number: string
           premium: number
           producer_id: string
@@ -614,6 +630,8 @@ export type Database = {
           effective_date?: string
           expiration_date?: string
           id?: string
+          is_demo?: boolean
+          legacy_id?: string | null
           policy_number?: string
           premium?: number
           producer_id?: string
@@ -706,6 +724,8 @@ export type Database = {
           created_by: string | null
           id: string
           insurance_type: Database["public"]["Enums"]["insurance_type"]
+          is_demo: boolean
+          legacy_id: string | null
           premium: number
           producer_id: string
           status: Database["public"]["Enums"]["quote_status"]
@@ -722,6 +742,8 @@ export type Database = {
           created_by?: string | null
           id?: string
           insurance_type: Database["public"]["Enums"]["insurance_type"]
+          is_demo?: boolean
+          legacy_id?: string | null
           premium: number
           producer_id: string
           status?: Database["public"]["Enums"]["quote_status"]
@@ -738,6 +760,8 @@ export type Database = {
           created_by?: string | null
           id?: string
           insurance_type?: Database["public"]["Enums"]["insurance_type"]
+          is_demo?: boolean
+          legacy_id?: string | null
           premium?: number
           producer_id?: string
           status?: Database["public"]["Enums"]["quote_status"]
@@ -792,6 +816,8 @@ export type Database = {
           description: string | null
           due_date: string
           id: string
+          is_demo: boolean
+          legacy_id: string | null
           priority: Database["public"]["Enums"]["priority_level"]
           status: Database["public"]["Enums"]["task_status"]
           title: string
@@ -807,6 +833,8 @@ export type Database = {
           description?: string | null
           due_date: string
           id?: string
+          is_demo?: boolean
+          legacy_id?: string | null
           priority?: Database["public"]["Enums"]["priority_level"]
           status?: Database["public"]["Enums"]["task_status"]
           title: string
@@ -822,6 +850,8 @@ export type Database = {
           description?: string | null
           due_date?: string
           id?: string
+          is_demo?: boolean
+          legacy_id?: string | null
           priority?: Database["public"]["Enums"]["priority_level"]
           status?: Database["public"]["Enums"]["task_status"]
           title?: string
@@ -889,11 +919,48 @@ export type Database = {
         }
       }
       clear_agency_demo_clients: { Args: never; Returns: number }
+      clear_agency_demo_documents: { Args: never; Returns: number }
+      clear_agency_demo_policies: { Args: never; Returns: number }
+      clear_agency_demo_quotes: { Args: never; Returns: number }
+      clear_agency_demo_tasks: { Args: never; Returns: number }
       current_agency_id: { Args: never; Returns: string }
+      import_client_entities: {
+        Args: {
+          p_agency_id: string
+          p_client_notes?: Json
+          p_documents?: Json
+          p_family_members?: Json
+          p_policies?: Json
+          p_quotes?: Json
+          p_tasks?: Json
+        }
+        Returns: Json
+      }
       is_admin: { Args: never; Returns: boolean }
       owns_or_admin: { Args: { owner: string }; Returns: boolean }
+      upsert_client_profile_note: {
+        Args: { p_body: string; p_client_id: string }
+        Returns: {
+          agency_id: string
+          body: string
+          client_id: string
+          created_at: string
+          created_by: string | null
+          id: string
+          note_type: Database["public"]["Enums"]["client_note_type"]
+          updated_at: string
+          updated_by: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "client_notes"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
     }
     Enums: {
+      client_note_type: "profile" | "timeline"
       client_status: "New Lead" | "Active" | "Prospect" | "Inactive" | "Lost"
       document_folder:
         | "Applications"
@@ -1056,6 +1123,7 @@ export const Constants = {
   },
   public: {
     Enums: {
+      client_note_type: ["profile", "timeline"],
       client_status: ["New Lead", "Active", "Prospect", "Inactive", "Lost"],
       document_folder: [
         "Applications",

@@ -9,9 +9,9 @@ import type { Task } from "@/types";
 
 type TaskListProps = {
   tasks: Task[];
-  onToggleComplete: (id: number) => void;
+  onToggleComplete: (id: string) => void;
   onEdit: (task: Task) => void;
-  onDelete: (id: number) => void;
+  onDelete: (id: string) => void;
 };
 
 export function TaskList({ tasks, onToggleComplete, onEdit, onDelete }: TaskListProps) {
@@ -46,7 +46,7 @@ export function TaskList({ tasks, onToggleComplete, onEdit, onDelete }: TaskList
     {
       key: "assignedTo",
       header: "Assigned To",
-      render: (task) => <span className="text-gray-300">{task.assignedTo}</span>,
+      render: (task) => <span className="text-gray-300">{task.assignedToName ?? "—"}</span>,
     },
     {
       key: "priority",

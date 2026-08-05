@@ -18,7 +18,7 @@ const client: Client = {
 };
 
 const dependentPolicy: Policy = {
-  id: 100,
+  id: "100",
   clientId: "1",
   clientName: "Jane Cooper",
   carrier: "State Farm",
@@ -28,13 +28,13 @@ const dependentPolicy: Policy = {
   expirationDate: new Date().toISOString(),
   status: "Active",
   premium: 1200,
-  producer: "Darren Belizaire",
+  assignedProducerName: "Darren Belizaire",
 };
 
 const dependentTask: Task = {
-  id: 200,
+  id: "200",
   title: "Follow up",
-  assignedTo: "Darren Belizaire",
+  assignedToName: "Darren Belizaire",
   priority: "Medium",
   dueDate: new Date().toISOString(),
   status: "Open",
