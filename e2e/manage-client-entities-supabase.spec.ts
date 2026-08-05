@@ -98,18 +98,42 @@ test.describe("client entities — supabase mode", () => {
     await expect(page.getByText(taskTitle)).toBeVisible();
 
     // ── Document: create, reload. ─────────────────────────────────────────
+    // The Applications folder in this shared test database can already
+    // hold placeholders from prior/retried runs, so a broad
+    // /New_Applications_/ match risks resolving to more than one row
+    // (a Playwright strict-mode violation). Documents are newest-first
+    // (see documentsRepository.ts's list() ordering and useDocuments.ts's
+    // optimistic prepend), so the row that just appeared is always the
+    // first one — read its exact filename and assert on that exact string
+    // from then on, never a pattern that could also match an older row.
     await page.goto("/documents");
     await page.getByText("Applications").first().click();
     await page.getByRole("button", { name: "+ Add Placeholder File" }).click();
-    await expect(page.getByText(/New_Applications_/)).toBeVisible();
+    // The button's own label flips to "Adding..." for the duration of the
+    // (real, async) create call and back once the new row has actually
+    // landed in the list — waiting for that to clear (mirroring the
+    // "Saving..." wait used below for notes) rules out reading the
+    // still-old first row before the new one has been prepended.
+    await expect(page.getByText("Adding...")).toHaveCount(0);
+
+    const newDocumentRow = page.locator("table tbody tr").first();
+    const newDocumentName = (await newDocumentRow.getByText(/^New_Applications_/).innerText()).trim();
+    await expect(page.getByText(newDocumentName, { exact: true })).toBeVisible();
 
     await page.reload();
     await page.getByText("Applications").first().click();
-    await expect(page.getByText(/New_Applications_/)).toBeVisible();
+    await expect(page.getByText(newDocumentName, { exact: true })).toBeVisible();
 
     // ── Client profile note: save, reload. ────────────────────────────────
+    // The client name itself isn't a link — only the row's "View" button
+    // navigates to the detail page. Clicking the name directly leaves the
+    // test on /clients, and every subsequent step (starting with "Notes")
+    // times out waiting for a tab that was never rendered.
     await page.goto("/clients");
-    await page.getByText(clientName).click();
+    const clientRow = page.getByText(clientName).locator("xpath=ancestor::tr");
+    await clientRow.getByRole("link", { name: "View" }).click();
+    await expect(page).toHaveURL(/\/clients\/[^/]+$/);
+
     await page.getByRole("button", { name: "Notes" }).click();
     const noteText = `E2E note ${Date.now()}`;
     await page.getByPlaceholder(/Call Friday/).fill(noteText);
