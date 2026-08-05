@@ -132,6 +132,6 @@ jobs:
       - name: Bootstrap the e2e test admin (also exercises scripts/bootstrap-admin.ts for real)
         run: npm run bootstrap-admin -- --email "$E2E_TEST_USER_EMAIL" --name "E2E Test Admin" --password "$E2E_TEST_USER_PASSWORD"
       - run: npx playwright install --with-deps chromium
-      - run: npx playwright test e2e/auth.spec.ts e2e/add-client-supabase.spec.ts
+      - run: npx playwright test e2e/auth.spec.ts e2e/add-client-supabase.spec.ts e2e/manage-client-entities-supabase.spec.ts
       - run: supabase stop
         if: always()

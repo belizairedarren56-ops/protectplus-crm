@@ -924,6 +924,18 @@ export type Database = {
       clear_agency_demo_quotes: { Args: never; Returns: number }
       clear_agency_demo_tasks: { Args: never; Returns: number }
       current_agency_id: { Args: never; Returns: string }
+      import_client_entities: {
+        Args: {
+          p_agency_id: string
+          p_client_notes?: Json
+          p_documents?: Json
+          p_family_members?: Json
+          p_policies?: Json
+          p_quotes?: Json
+          p_tasks?: Json
+        }
+        Returns: Json
+      }
       is_admin: { Args: never; Returns: boolean }
       owns_or_admin: { Args: { owner: string }; Returns: boolean }
       upsert_client_profile_note: {
