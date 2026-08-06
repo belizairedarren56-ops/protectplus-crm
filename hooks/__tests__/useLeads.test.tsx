@@ -270,7 +270,14 @@ describe("useLeads — optimistic updateLead", () => {
       await resultX;
     });
 
-    expect(result.current.leads.find((l) => l.id === "lead-X")?.stage).toBe("New"); // reverted
+    // resultX settling only means mutateAsync's own promise has resolved —
+    // it does not strictly guarantee that onError's setQueryData call (the
+    // actual rollback) has already been reflected in a React re-render by
+    // this point. Wait for the observable UI state rather than assuming
+    // synchronous completion, matching the async nature of the rollback.
+    await waitFor(() => {
+      expect(result.current.leads.find((l) => l.id === "lead-X")?.stage).toBe("New"); // reverted
+    });
     expect(result.current.leads.find((l) => l.id === "lead-Y")?.stage).toBe("Sold"); // untouched
   });
 
