@@ -182,15 +182,15 @@ describe("useLeads — optimistic updateLead", () => {
     expect(result.current.leads.find((l) => l.id === "lead-B")).toEqual(leadB);
   });
 
-  it("two overlapping updates to the same lead: an older mutation's failure never reverts a newer mutation's success", async () => {
+  it("two overlapping updates to the same lead: an older mutation's failure never reverts a newer mutation's optimistic state, and B's real request stays serialized behind A's", async () => {
     const lead = makeLead({ id: "lead-1", stage: "New" });
     vi.spyOn(demoLeadsRepository, "list").mockResolvedValueOnce(okResult([lead])).mockReturnValue(neverResolves());
 
     const attemptA = deferred<Result<Lead, DataBackendError>>();
     const attemptB = deferred<Result<Lead, DataBackendError>>();
-    vi.spyOn(demoLeadsRepository, "update")
-      .mockReturnValueOnce(attemptA.promise)
-      .mockReturnValueOnce(attemptB.promise);
+    const updateSpy = vi
+      .spyOn(demoLeadsRepository, "update")
+      .mockImplementation((_id, patch) => (patch.stage === "Contacted" ? attemptA.promise : attemptB.promise));
 
     const queryClient = createTestQueryClient();
     const { result } = renderHook(() => useLeads(), { wrapper: wrapperFor(DEMO_SCOPE, queryClient) });
@@ -202,24 +202,33 @@ describe("useLeads — optimistic updateLead", () => {
     act(() => {
       resultA = result.current.updateLead("lead-1", { stage: "Contacted" }); // mutation A starts
     });
+    await waitFor(() => expect(updateSpy).toHaveBeenCalledTimes(1)); // A's real request is now in flight
     await waitFor(() => expect(result.current.leads[0].stage).toBe("Contacted"));
 
     act(() => {
       resultB = result.current.updateLead("lead-1", { stage: "Sold" }); // mutation B starts before A settles
     });
-    await waitFor(() => expect(result.current.leads[0].stage).toBe("Sold"));
+    await waitFor(() => expect(result.current.leads[0].stage).toBe("Sold")); // optimistic write is still instant
 
-    // B succeeds first.
-    attemptB.resolve(okResult({ ...lead, stage: "Sold" }));
-    await act(async () => {
-      await resultB;
-    });
-    expect(result.current.leads[0].stage).toBe("Sold");
+    // B is serialized behind A for the same lead — its real request must
+    // not have been dispatched yet, no matter how the optimistic cache
+    // already looks.
+    expect(updateSpy).toHaveBeenCalledTimes(1);
 
-    // A fails afterward — must NOT revert B's already-successful change.
+    // A's request fails — its onError must not revert B's already-applied
+    // optimistic state (the per-lead sequence-number guard).
     attemptA.resolve(errResult("stale failure"));
     await act(async () => {
       await resultA;
+    });
+    expect(result.current.leads[0].stage).toBe("Sold");
+
+    // A settling (even by failing) lets the queue advance — B's real
+    // request now actually runs.
+    await waitFor(() => expect(updateSpy).toHaveBeenCalledTimes(2));
+    attemptB.resolve(okResult({ ...lead, stage: "Sold" }));
+    await act(async () => {
+      await resultB;
     });
     expect(result.current.leads[0].stage).toBe("Sold");
   });
@@ -334,5 +343,70 @@ describe("useLeads — optimistic updateLead", () => {
 
     // B was the last pending update — now it invalidates, exactly once.
     expect(invalidateSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("(regression) serializes same-lead requests so a slower older update can never overwrite a newer one at the backend", async () => {
+    const lead = makeLead({ id: "lead-1", stage: "New" });
+    // A fake "server": what the backend actually persisted, plus a log of
+    // exactly when each request started and finished — this is what
+    // proves true serialization, not just an eventually-correct cache.
+    let persistedStage: Lead["stage"] = "New";
+    const callOrder: string[] = [];
+
+    vi.spyOn(demoLeadsRepository, "list").mockImplementation(async () =>
+      okResult([{ ...lead, stage: persistedStage }])
+    );
+    vi.spyOn(demoLeadsRepository, "update").mockImplementation(async (_id, patch) => {
+      const stage = patch.stage as Lead["stage"];
+      callOrder.push(`start:${stage}`);
+      // Deliberately inverted delays: "Contacted" (the OLDER request, by
+      // user intent) is slower than "Sold" (the NEWER one). Without
+      // serialization, "Sold" would reach the backend first and then be
+      // silently overwritten when "Contacted" finally lands — exactly the
+      // bug being fixed here.
+      const delayMs = stage === "Contacted" ? 30 : 5;
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+      callOrder.push(`end:${stage}`);
+      persistedStage = stage;
+      return okResult({ ...lead, stage });
+    });
+
+    const queryClient = createTestQueryClient();
+    const { result } = renderHook(() => useLeads(), { wrapper: wrapperFor(DEMO_SCOPE, queryClient) });
+    await waitFor(() => expect(result.current.leadsLoaded).toBe(true));
+
+    let resultA!: Promise<Result<Lead, DataBackendError>>;
+    let resultB!: Promise<Result<Lead, DataBackendError>>;
+
+    act(() => {
+      resultA = result.current.updateLead("lead-1", { stage: "Contacted" }); // A: older intent, slower request
+    });
+    // Wait until A's request has genuinely started before issuing B — this
+    // is what "immediately" moving it again means: A is already in flight
+    // when the user's next action (B) fires.
+    await waitFor(() => expect(callOrder).toContain("start:Contacted"));
+
+    act(() => {
+      resultB = result.current.updateLead("lead-1", { stage: "Sold" }); // B: latest intent, faster request
+    });
+
+    await act(async () => {
+      await Promise.all([resultA, resultB]);
+    });
+
+    // B's request never even started until A's had fully finished — proof
+    // of real serialization, not a coincidence of these particular delays.
+    expect(callOrder).toEqual(["start:Contacted", "end:Contacted", "start:Sold", "end:Sold"]);
+
+    // The backend ends on B's stage, not A's...
+    expect(persistedStage).toBe("Sold");
+
+    // ...and so does the query cache, both immediately after settling...
+    expect(result.current.leads.find((l) => l.id === "lead-1")?.stage).toBe("Sold");
+
+    // ...and after the reconciling refetch pulls the backend's true state.
+    await waitFor(() => {
+      expect(result.current.leads.find((l) => l.id === "lead-1")?.stage).toBe("Sold");
+    });
   });
 });

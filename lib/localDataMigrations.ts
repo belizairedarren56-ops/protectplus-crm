@@ -309,7 +309,20 @@ async function runMigrationSafe(): Promise<Result<void, DataBackendError>> {
 }
 
 async function runMigration(): Promise<Result<void, DataBackendError>> {
-  if (getStoredVersion() >= LATEST_VERSION) {
+  // This runs BEFORE runMigrationSafe()'s own try/catch is ever entered —
+  // without its own guard here, a throwing getStoredVersion() (storage
+  // access blocked, a security policy, ...) would propagate out of this
+  // async function as a REJECTED promise, breaking
+  // ensureLocalDataMigrated()'s guarantee that it always resolves with a
+  // typed Result and never rejects.
+  let version: number;
+  try {
+    version = getStoredVersion();
+  } catch (error) {
+    return migrationError("Could not read the local data migration version.", error);
+  }
+
+  if (version >= LATEST_VERSION) {
     // Already migrated (possibly by another tab, possibly by this one on a
     // prior call) — nothing to race, nothing to listen for.
     return { ok: true, data: undefined };

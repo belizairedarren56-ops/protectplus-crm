@@ -585,6 +585,26 @@ describe("localStorage exceptions during migration", () => {
     expect(window.localStorage.getItem(VERSION_KEY)).toBeNull();
   });
 
+  it("(regression) returns a typed migration error, not a rejected promise, when reading the version key itself throws — before runMigrationSafe() is ever entered", async () => {
+    // getStoredVersion() is called directly inside runMigration(), BEFORE
+    // control ever reaches runMigrationSafe()'s try/catch (which only
+    // wraps runMigrationUnsafe()). Without its own guard, a throw here
+    // would propagate out of runMigration() (an async function) as a
+    // REJECTED promise — breaking ensureLocalDataMigrated()'s contract
+    // that it always resolves with a typed Result and never rejects.
+    seedLegacyFixture();
+    const getItemSpy = vi.spyOn(Storage.prototype, "getItem").mockImplementation((key: string) => {
+      if (key === VERSION_KEY) throw new Error("SecurityError: storage access blocked");
+      return null;
+    });
+
+    await expect(ensureLocalDataMigrated()).resolves.toEqual(
+      expect.objectContaining({ ok: false, error: expect.objectContaining({ kind: "migration" }) })
+    );
+
+    getItemSpy.mockRestore();
+  });
+
   it("returns a typed migration error (not a rejected promise) when removeItem throws clearing the journal", async () => {
     seedLegacyFixture();
     const removeItemSpy = vi.spyOn(Storage.prototype, "removeItem").mockImplementation(() => {

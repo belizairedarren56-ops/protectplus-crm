@@ -62,6 +62,29 @@ export function useLeads(): LeadsApi {
   // later one is still pending never triggers a refetch that could
   // overwrite the later mutation's still-pending optimistic write.
   const pendingLeadUpdates = useRef(0);
+  // Per-lead serialized network queue — the sequence-number guard above
+  // only protects the LOCAL optimistic cache from a stale rollback; it
+  // does nothing to stop two concurrent requests for the SAME lead from
+  // completing at Supabase out of order (e.g. an older "Contacted" request
+  // finishing after a newer "Sold" request, leaving the database on the
+  // stale value even though the cache and every rollback guard behaved
+  // correctly). Chaining each lead's actual repository.update() calls onto
+  // a per-lead promise tail guarantees they reach the database in the same
+  // order the user issued them — the newer request never even starts
+  // until the older one has fully settled — so the last-issued update
+  // always wins, regardless of relative network latency. Different leads
+  // get independent queue entries and still update fully concurrently.
+  const leadUpdateQueues = useRef(new Map<string, Promise<unknown>>());
+
+  function enqueueForLead<T>(id: string, task: () => Promise<T>): Promise<T> {
+    const previous = leadUpdateQueues.current.get(id) ?? Promise.resolve();
+    // Chain onto the previous task regardless of whether it succeeded or
+    // failed — an older update's failure must never permanently block a
+    // newer update for the same lead.
+    const next = previous.then(task, task);
+    leadUpdateQueues.current.set(id, next);
+    return next;
+  }
 
   const query = useQuery<Lead[], DataBackendError>({
     queryKey,
@@ -82,7 +105,7 @@ export function useLeads(): LeadsApi {
     { id: string; patch: Partial<NewLeadInput> },
     UpdateLeadMutationContext
   >({
-    mutationFn: ({ id, patch }) => unwrap(repository.update(id, patch)),
+    mutationFn: ({ id, patch }) => enqueueForLead(id, () => unwrap(repository.update(id, patch))),
     onMutate: async ({ id, patch }) => {
       // Cancel any in-flight list fetch first — without this, a
       // background refetch already running when the drag starts could
