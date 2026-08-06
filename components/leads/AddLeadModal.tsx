@@ -3,53 +3,105 @@
 import { FormEvent, ReactNode, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
+import { useAccessScope } from "@/hooks/useAccessScope";
+import { useAgencyProducers } from "@/hooks/useAgencyProducers";
 import { INSURANCE_TYPES, PRODUCERS } from "@/lib/constants";
+import type { DataBackendError } from "@/lib/dataMode";
+import type { NewLeadInput } from "@/lib/repositories/leadsRepository";
+import type { Result } from "@/lib/result";
 import type { InsuranceType, Lead, Priority } from "@/types";
 
 const FIELD_CLASSES =
   "w-full rounded-xl border border-gray-700 bg-black px-4 py-3 text-white outline-none placeholder:text-gray-600 focus:border-yellow-500";
 
-const emptyForm = {
-  clientName: "",
-  phone: "",
-  email: "",
-  insuranceType: INSURANCE_TYPES[0],
-  producer: PRODUCERS[0],
-  priority: "Medium" as Priority,
+type FormState = {
+  clientName: string;
+  phone: string;
+  email: string;
+  insuranceType: InsuranceType;
+  priority: Priority;
+  assignedProducerName: string; // demo mode only
+  assignedProducerId: string; // supabase mode, admin only — "" means "assign to me" isn't resolved yet
 };
+
+function emptyForm(defaultAssignedProducerId: string): FormState {
+  return {
+    clientName: "",
+    phone: "",
+    email: "",
+    insuranceType: INSURANCE_TYPES[0],
+    priority: "Medium",
+    assignedProducerName: PRODUCERS[0],
+    assignedProducerId: defaultAssignedProducerId,
+  };
+}
 
 type AddLeadModalProps = {
   open: boolean;
   onClose: () => void;
-  onAdd: (lead: Lead) => void;
+  onCreate: (input: NewLeadInput) => Promise<Result<Lead, DataBackendError>>;
 };
 
-export function AddLeadModal({ open, onClose, onAdd }: AddLeadModalProps) {
-  const [formData, setFormData] = useState(emptyForm);
+// Create-only, matching today's exact behavior — no edit-lead UI exists;
+// stage-change-via-drag remains the only update path. No client picker
+// either — clientId stays nullable and unset by this modal, matching
+// TaskModal's precedent (leads.client_id, like tasks.client_id, is
+// nullable and the current UI has never set it).
+export function AddLeadModal({ open, onClose, onCreate }: AddLeadModalProps) {
+  const scope = useAccessScope();
+  const isSupabase = scope.backend === "supabase";
+  const isAdmin = scope.status === "ready" && isSupabase && scope.role === "admin";
+  const currentUserId = scope.status === "ready" && isSupabase ? scope.userId : "";
+  // Only fires for an admin in supabase mode — see useAgencyProducers().
+  const producersQuery = useAgencyProducers();
+
+  const [formData, setFormData] = useState<FormState>(() => emptyForm(currentUserId));
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   // Cancel/backdrop/× all funnel through here, not just submit, so a
   // cancelled draft never survives into the next time this modal is opened.
   function handleClose() {
-    setFormData(emptyForm);
+    setFormData(emptyForm(currentUserId));
+    setError(null);
     onClose();
   }
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    setSubmitting(true);
+    setError(null);
 
-    onAdd({
-      id: Date.now(),
+    // producer_id is NOT NULL with no server-side default for an admin
+    // caller (force_owner_leads() only forces it for non-admins) — an
+    // admin must always send a real id; a producer omits it entirely and
+    // lets the trigger fill in auth.uid(), same as TaskModal's assignee path.
+    const producer = isSupabase
+      ? isAdmin
+        ? { assignedProducerId: formData.assignedProducerId || currentUserId }
+        : {}
+      : { assignedProducerName: formData.assignedProducerName };
+
+    const input: NewLeadInput = {
       clientName: formData.clientName.trim(),
       phone: formData.phone.trim(),
       email: formData.email.trim(),
-      insuranceType: formData.insuranceType as InsuranceType,
-      producer: formData.producer,
+      insuranceType: formData.insuranceType,
       priority: formData.priority,
       stage: "New",
       lastContact: new Date().toISOString(),
-    });
+      ...producer,
+    };
 
-    setFormData(emptyForm);
+    const result = await onCreate(input);
+    setSubmitting(false);
+
+    if (!result.ok) {
+      setError(result.error.message);
+      return;
+    }
+
+    setFormData(emptyForm(currentUserId));
     onClose();
   }
 
@@ -107,15 +159,34 @@ export function AddLeadModal({ open, onClose, onAdd }: AddLeadModalProps) {
           </FormField>
 
           <FormField label="Producer">
-            <select
-              value={formData.producer}
-              onChange={(event) => setFormData({ ...formData, producer: event.target.value })}
-              className={FIELD_CLASSES}
-            >
-              {PRODUCERS.map((producer) => (
-                <option key={producer}>{producer}</option>
-              ))}
-            </select>
+            {!isSupabase ? (
+              <select
+                value={formData.assignedProducerName}
+                onChange={(event) => setFormData({ ...formData, assignedProducerName: event.target.value })}
+                className={FIELD_CLASSES}
+              >
+                {PRODUCERS.map((producer) => (
+                  <option key={producer}>{producer}</option>
+                ))}
+              </select>
+            ) : isAdmin ? (
+              <select
+                value={formData.assignedProducerId}
+                onChange={(event) => setFormData({ ...formData, assignedProducerId: event.target.value })}
+                disabled={producersQuery.isLoading}
+                className={`${FIELD_CLASSES} disabled:opacity-50`}
+              >
+                {(producersQuery.data ?? []).map((producer) => (
+                  <option key={producer.id} value={producer.id}>
+                    {producer.fullName}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <p className="w-full rounded-xl border border-gray-800 bg-black/50 px-4 py-3 text-gray-400">
+                Assigned to you
+              </p>
+            )}
           </FormField>
 
           <FormField label="Priority">
@@ -133,11 +204,19 @@ export function AddLeadModal({ open, onClose, onAdd }: AddLeadModalProps) {
           </FormField>
         </div>
 
+        {error && (
+          <p role="alert" className="text-sm font-semibold text-red-400">
+            {error}
+          </p>
+        )}
+
         <div className="flex justify-end gap-3 pt-4">
-          <Button type="button" variant="secondary" onClick={handleClose}>
+          <Button type="button" variant="secondary" onClick={handleClose} disabled={submitting}>
             Cancel
           </Button>
-          <Button type="submit">Save Lead</Button>
+          <Button type="submit" disabled={submitting}>
+            {submitting ? "Saving..." : "Save Lead"}
+          </Button>
         </div>
       </form>
     </Modal>

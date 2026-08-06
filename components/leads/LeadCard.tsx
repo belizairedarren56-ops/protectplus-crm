@@ -30,7 +30,7 @@ export function LeadCard({ lead }: { lead: Lead }) {
       <p className="mt-1 text-xs text-gray-500">{lead.insuranceType}</p>
 
       <div className="mt-3 flex items-center justify-between">
-        <span className="text-xs text-gray-400">{lead.producer}</span>
+        <span className="text-xs text-gray-400">{lead.assignedProducerName ?? "Unassigned"}</span>
         <Badge className={PRIORITY_BADGE_STYLES[lead.priority]}>{lead.priority}</Badge>
       </div>
 

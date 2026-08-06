@@ -27,18 +27,18 @@ import type { Result } from "@/lib/result";
  *
  * Every failure-capable step (anything that's a real repository/RPC call,
  * not a synchronous local-state write) runs BEFORE the guaranteed-to-
- * succeed setLeads/setNotifications calls, in both clearDemoData() and
+ * succeed setNotifications call, in both clearDemoData() and
  * loadDemoData() — preserving the "abort before touching the next entity"
  * discipline even though not every entity this hook touches can fail the
- * same way anymore. leads and notifications are the only two entities
- * still on the synchronous local-state path (see lib/scopedStorage.ts) —
- * clients/documents/tasks/quotes/policies all go through a real
+ * same way anymore. notifications is the only entity still on the
+ * synchronous local-state path (see lib/scopedStorage.ts) —
+ * clients/documents/tasks/quotes/policies/leads all go through a real
  * repository now, and family_members has never been on it at all.
  */
 export function useDemoData() {
   const scope = useAccessScope();
   const { clients, loadDemoClients, clearDemoClients } = useClients();
-  const { leads, setLeads } = useLeads();
+  const { leads, loadDemoLeads, clearDemoLeads } = useLeads();
   const { quotes, loadDemoQuotes, clearDemoQuotes } = useQuotes();
   const { policies, loadDemoPolicies, clearDemoPolicies } = usePolicies();
   const { tasks, loadDemoTasks, clearDemoTasks } = useTasks();
@@ -65,6 +65,9 @@ export function useDemoData() {
     const clearedPolicies = await clearDemoPolicies();
     if (!clearedPolicies.ok) return clearedPolicies;
 
+    const clearedLeads = await clearDemoLeads();
+    if (!clearedLeads.ok) return clearedLeads;
+
     // family_members has no is_demo tag and no dedicated clear RPC — in
     // `supabase` mode, Postgres's own `on delete cascade` already removed
     // these rows the instant their parent demo client was deleted above.
@@ -79,7 +82,6 @@ export function useDemoData() {
       if (deleteFailure && !deleteFailure.ok) return deleteFailure;
     }
 
-    setLeads((current) => current.filter((lead) => !lead.isDemo));
     setNotifications((current) => current.filter((notification) => !notification.isDemo));
 
     return { ok: true, data: undefined };
@@ -89,10 +91,10 @@ export function useDemoData() {
     clearDemoTasks,
     clearDemoQuotes,
     clearDemoPolicies,
+    clearDemoLeads,
     scope.backend,
     familyMembers,
     deleteFamilyMember,
-    setLeads,
     setNotifications,
   ]);
 
@@ -166,6 +168,16 @@ export function useDemoData() {
     const loadedPolicies = await loadDemoPolicies(policiesToLoad);
     if (!loadedPolicies.ok) return loadedPolicies;
 
+    // Same NOT NULL / no-admin-default reasoning as tasks.assigned_to,
+    // quotes.producer_id, and policies.producer_id above, applied to
+    // leads.producer_id (force_owner_leads()).
+    const leadsToLoad = currentUserId
+      ? demo.leads.map((lead) => ({ ...lead, assignedProducerId: currentUserId }))
+      : demo.leads;
+
+    const loadedLeads = await loadDemoLeads(leadsToLoad);
+    if (!loadedLeads.ok) return loadedLeads;
+
     // No batch-create endpoint for family_members (see
     // familyMembersRepository.ts) — created one at a time through the real
     // repository, same as clients go through loadDemoClients() rather than
@@ -176,7 +188,6 @@ export function useDemoData() {
     const familyMemberFailure = familyMemberResults.find((result) => !result.ok);
     if (familyMemberFailure && !familyMemberFailure.ok) return familyMemberFailure;
 
-    setLeads((current) => [...demo.leads, ...current]);
     setNotifications((current) => [...demo.notifications, ...current]);
 
     return { ok: true, data: undefined };
@@ -187,9 +198,9 @@ export function useDemoData() {
     loadDemoTasks,
     loadDemoQuotes,
     loadDemoPolicies,
+    loadDemoLeads,
     createFamilyMember,
     currentUserId,
-    setLeads,
     setNotifications,
   ]);
 

@@ -68,10 +68,10 @@ describe("Clients page — archive/restore", () => {
     // No permanent-delete path exists — dependents must be untouched.
     // Both entities are still routed through the versioned local-data key
     // post-migration, not the untouched legacy key.
-    expect(getItem<Policy[]>(`${STORAGE_KEYS.policies}@v2`, [])).toHaveLength(1);
-    expect(getItem<Task[]>(`${STORAGE_KEYS.tasks}@v2`, [])).toHaveLength(1);
+    expect(getItem<Policy[]>(`${STORAGE_KEYS.policies}@v3`, [])).toHaveLength(1);
+    expect(getItem<Task[]>(`${STORAGE_KEYS.tasks}@v3`, [])).toHaveLength(1);
 
-    const archivedClients = getItem<Client[]>(`${STORAGE_KEYS.clients}@v2`, []);
+    const archivedClients = getItem<Client[]>(`${STORAGE_KEYS.clients}@v3`, []);
     expect(archivedClients).toHaveLength(1);
     expect(archivedClients[0].archivedAt).toBeTruthy();
   });
@@ -94,7 +94,7 @@ describe("Clients page — archive/restore", () => {
     await user.click(screen.getByRole("button", { name: "Active" }));
     expect(await screen.findByText("Jane Cooper")).toBeInTheDocument();
 
-    const restoredClients = getItem<Client[]>(`${STORAGE_KEYS.clients}@v2`, []);
+    const restoredClients = getItem<Client[]>(`${STORAGE_KEYS.clients}@v3`, []);
     expect(restoredClients[0].archivedAt).toBeUndefined();
   });
 

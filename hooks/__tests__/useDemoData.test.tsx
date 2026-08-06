@@ -50,7 +50,7 @@ describe("useDemoData", () => {
     await waitFor(() => expect(result.current.hasDemoData).toBe(true));
     expect(result.current.counts.clients).toBe(50);
 
-    const storedClients = getItem<Client[]>(`${STORAGE_KEYS.clients}@v2`, []);
+    const storedClients = getItem<Client[]>(`${STORAGE_KEYS.clients}@v3`, []);
     expect(storedClients).toHaveLength(50);
     expect(storedClients.every((client) => client.isDemo)).toBe(true);
   });
@@ -72,7 +72,7 @@ describe("useDemoData", () => {
 
     await waitFor(() => expect(result.current.hasDemoData).toBe(false));
 
-    const storedClients = getItem<Client[]>(`${STORAGE_KEYS.clients}@v2`, []);
+    const storedClients = getItem<Client[]>(`${STORAGE_KEYS.clients}@v3`, []);
     expect(storedClients).toHaveLength(1);
     expect(storedClients[0].id).toBe(realClient.id);
     expect(storedClients[0].isDemo).toBeFalsy();
@@ -92,7 +92,7 @@ describe("useDemoData", () => {
     });
     await waitFor(() => expect(result.current.counts.clients).toBe(50));
 
-    const storedClients = getItem<Client[]>(`${STORAGE_KEYS.clients}@v2`, []);
+    const storedClients = getItem<Client[]>(`${STORAGE_KEYS.clients}@v3`, []);
     expect(storedClients).toHaveLength(50);
   });
 
@@ -118,7 +118,7 @@ describe("useDemoData", () => {
       key: string,
       value: string
     ) {
-      if (key === `${STORAGE_KEYS.clients}@v2`) throw new Error("simulated storage failure");
+      if (key === `${STORAGE_KEYS.clients}@v3`) throw new Error("simulated storage failure");
       return originalSetItem.call(this, key, value);
     });
 
@@ -151,7 +151,7 @@ describe("useDemoData", () => {
       key: string,
       value: string
     ) {
-      if (key === `${STORAGE_KEYS.clients}@v2`) throw new Error("simulated storage failure");
+      if (key === `${STORAGE_KEYS.clients}@v3`) throw new Error("simulated storage failure");
       return originalSetItem.call(this, key, value);
     });
 

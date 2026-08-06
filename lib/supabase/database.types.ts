@@ -454,7 +454,9 @@ export type Database = {
           email: string | null
           id: string
           insurance_type: Database["public"]["Enums"]["insurance_type"]
+          is_demo: boolean
           last_contact: string | null
+          legacy_id: string | null
           phone: string | null
           priority: Database["public"]["Enums"]["priority_level"]
           producer_id: string
@@ -471,7 +473,9 @@ export type Database = {
           email?: string | null
           id?: string
           insurance_type: Database["public"]["Enums"]["insurance_type"]
+          is_demo?: boolean
           last_contact?: string | null
+          legacy_id?: string | null
           phone?: string | null
           priority?: Database["public"]["Enums"]["priority_level"]
           producer_id: string
@@ -488,7 +492,9 @@ export type Database = {
           email?: string | null
           id?: string
           insurance_type?: Database["public"]["Enums"]["insurance_type"]
+          is_demo?: boolean
           last_contact?: string | null
+          legacy_id?: string | null
           phone?: string | null
           priority?: Database["public"]["Enums"]["priority_level"]
           producer_id?: string
@@ -920,6 +926,7 @@ export type Database = {
       }
       clear_agency_demo_clients: { Args: never; Returns: number }
       clear_agency_demo_documents: { Args: never; Returns: number }
+      clear_agency_demo_leads: { Args: never; Returns: number }
       clear_agency_demo_policies: { Args: never; Returns: number }
       clear_agency_demo_quotes: { Args: never; Returns: number }
       clear_agency_demo_tasks: { Args: never; Returns: number }
@@ -930,6 +937,7 @@ export type Database = {
           p_client_notes?: Json
           p_documents?: Json
           p_family_members?: Json
+          p_leads?: Json
           p_policies?: Json
           p_quotes?: Json
           p_tasks?: Json

@@ -1,6 +1,7 @@
 import { CARRIERS, CLIENT_STATUSES, INSURANCE_TYPES, PRODUCERS } from "@/lib/constants";
 import type { NewDocumentInput } from "@/lib/repositories/documentsRepository";
 import type { NewFamilyMemberInput } from "@/lib/repositories/familyMembersRepository";
+import type { NewLeadInput } from "@/lib/repositories/leadsRepository";
 import type { NewPolicyInput } from "@/lib/repositories/policiesRepository";
 import type { NewQuoteInput } from "@/lib/repositories/quotesRepository";
 import type { NewTaskInput } from "@/lib/repositories/tasksRepository";
@@ -8,7 +9,6 @@ import { LEAD_STAGES, DOCUMENT_FOLDERS } from "@/types";
 import type {
   Client,
   InsuranceType,
-  Lead,
   Notification,
   PolicyStatus,
   Priority,
@@ -239,7 +239,10 @@ export type DemoDataSet = {
    * from Phase 3B on (see policiesRepository.ts), so the caller
    * (useDemoData) creates each one through the real repository. */
   policies: NewPolicyInput[];
-  leads: Lead[];
+  /** No numeric id of its own — leads is Supabase/repository-backed from
+   * Phase 3C on (see leadsRepository.ts), so the caller (useDemoData)
+   * creates each one through the real repository. */
+  leads: NewLeadInput[];
   /** No numeric id of its own — quotes is Supabase/repository-backed from
    * Phase 3B on (see quotesRepository.ts), so the caller (useDemoData)
    * creates each one through the real repository. */
@@ -301,18 +304,17 @@ export function generateDemoDataForClients(startId: number, clients: Client[]): 
   });
   nextId += policies.length;
 
-  const leads: Lead[] = Array.from({ length: 20 }, (_, index) => {
+  const leads: NewLeadInput[] = Array.from({ length: 20 }, () => {
     const client = rng() > 0.4 ? pick(rng, clients) : null;
     const firstName = client?.firstName ?? pick(rng, FIRST_NAMES);
     const lastName = client?.lastName ?? pick(rng, LAST_NAMES);
 
     return {
-      id: nextId + index,
       clientId: client?.id,
       clientName: `${firstName} ${lastName}`,
       insuranceType: pick(rng, INSURANCE_TYPES),
       stage: pick(rng, LEAD_STAGES),
-      producer: pick(rng, PRODUCERS),
+      assignedProducerName: pick(rng, PRODUCERS),
       priority: pick(rng, ["Low", "Medium", "High"] satisfies Priority[]),
       lastContact: isoDaysFromNow(-randomInt(rng, 0, 30)),
       phone: randomPhone(rng),
@@ -320,7 +322,6 @@ export function generateDemoDataForClients(startId: number, clients: Client[]): 
       isDemo: true,
     };
   });
-  nextId += leads.length;
 
   const quotes: NewQuoteInput[] = Array.from({ length: 15 }, () => {
     const client = pick(rng, clients);

@@ -70,16 +70,30 @@ describe("generateDemoDataForClients", () => {
     }
   });
 
-  it("produces unique ids across every generated entity with a generator-assigned id", () => {
-    // documents, tasks, quotes, policies, and family_members carry no
-    // numeric id of their own — all five are created through their real
-    // repository (see useDemoData.ts), which assigns the id, so there's
-    // nothing to check uniqueness against here. leads and notifications
-    // are the only two entities remaining on the generator-assigned-id
-    // path.
+  it("every generated lead with a clientId references a real, resolved client", () => {
+    // Unlike quotes/policies, leads legitimately has no client link a
+    // meaningful fraction of the time (roughly 40%) — this only checks the
+    // leads that DO have one.
     const clients = resolveClients();
     const demo = generateDemoDataForClients(1, clients);
-    const allIds = [...demo.leads.map((l) => l.id), ...demo.notifications.map((n) => n.id)];
+    const clientIds = new Set(clients.map((client) => client.id));
+
+    const leadsWithClient = demo.leads.filter((lead) => lead.clientId !== undefined);
+    expect(leadsWithClient.length).toBeGreaterThan(0);
+    for (const lead of leadsWithClient) {
+      expect(clientIds.has(lead.clientId!)).toBe(true);
+    }
+  });
+
+  it("produces unique ids across every generated entity with a generator-assigned id", () => {
+    // documents, tasks, quotes, policies, leads, and family_members carry
+    // no numeric id of their own — all six are created through their real
+    // repository (see useDemoData.ts), which assigns the id, so there's
+    // nothing to check uniqueness against here. notifications is the only
+    // entity remaining on the generator-assigned-id path.
+    const clients = resolveClients();
+    const demo = generateDemoDataForClients(1, clients);
+    const allIds = demo.notifications.map((n) => n.id);
 
     expect(new Set(allIds).size).toBe(allIds.length);
   });
